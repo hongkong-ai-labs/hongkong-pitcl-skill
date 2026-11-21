@@ -421,14 +421,18 @@ impl MawanServer {
     }
 
     #[tool(
-        description = "Current Hong Kong Observatory weather relevant to Ma Wan, plus a PITCL-specific impact assessment: temperatures at the nearest stations, humidity, rainfall, UV, regional 10-minute wind, active warnings (typhoon, rainstorm, thunderstorm, monsoon), the local forecast, and separate bus/ferry guidance. A T8 does not automatically cancel buses: ferries suspend about 2 hours after T8, while buses continue until Stage 2 high-wind management on Tsing Ma Bridge (>75 km/h). HKO's open wind feed has no Tsing Ma Bridge station, so bridge_wind.available is false and the bridge stage is unknown."
+        description = "Current Hong Kong Observatory weather relevant to Ma Wan, plus a PITCL-specific impact assessment: temperatures at the nearest stations, humidity, rainfall, UV, regional 10-minute wind, active warnings (typhoon, rainstorm, thunderstorm, monsoon), the local forecast, and separate bus/ferry guidance. A T8 does not automatically cancel buses: ferries suspend about 2 hours after T8, while buses continue until Stage 2 high-wind management on Tsing Ma Bridge (>75 km/h). HKO's open wind feed has no Tsing Ma Bridge station, so bridge_wind.available is false. The bridge stage is unknown unless TD publishes a high-wind traffic notice, in which case bridge_wind.stage and stage_source report that official stage."
     )]
     async fn get_ma_wan_weather(
         &self,
         Parameters(args): Parameters<WeatherArgs>,
     ) -> Result<String, ErrorData> {
         let lang = lang_code(args.lang.as_deref())?;
-        let report = self.service.weather(lang).await.map_err(mcp_error)?;
+        let report = self
+            .service
+            .weather_with_stage(lang)
+            .await
+            .map_err(mcp_error)?;
         pretty(&report)
     }
 
@@ -507,7 +511,7 @@ impl MawanServer {
 #[tool_handler(
     name = "mawan",
     version = "0.1.0",
-    instructions = "Ma Wan (Park Island) transport: buses, ferries, PITCL notices, weather and traffic. Live bus data covers PITCL NR330/NR332/NR334/NR338 and KMB 230R; published timetables cover NR338S, NR331 and NR331S. Ferries (Central and Tsuen Wan) are timetable-only. Start with get_ma_wan_status for disruption questions and get_ma_wan_next_departures for 'next bus/ferry'. Use get_ma_wan_weather for HKO warnings, forecast and regional wind, get_ma_wan_traffic for TD special traffic news, get_ma_wan_news for operator announcements, get_ma_wan_data_info for freshness, and get_pitcl_guide for static contact, adverse-weather and passenger-policy information. All times are Hong Kong time (UTC+8); never describe static timetables as live. HKO publishes no Tsing Ma Bridge anemometer, so bridge wind stage is unknown unless a warning or notice says otherwise."
+    instructions = "Ma Wan (Park Island) transport: buses, ferries, PITCL notices, weather and traffic. Live bus data covers PITCL NR330/NR332/NR334/NR338 and KMB 230R; published timetables cover NR338S, NR331 and NR331S. Ferries (Central and Tsuen Wan) are timetable-only. Start with get_ma_wan_status for disruption questions and get_ma_wan_next_departures for 'next bus/ferry'. Use get_ma_wan_weather for HKO warnings, forecast and regional wind, get_ma_wan_traffic for TD special traffic news, get_ma_wan_news for operator announcements, get_ma_wan_data_info for freshness, and get_pitcl_guide for static contact, adverse-weather and passenger-policy information. All times are Hong Kong time (UTC+8); never describe static timetables as live. HKO publishes no Tsing Ma Bridge anemometer, so bridge wind is a regional proxy; report bridge_wind.stage only when a TD high-wind notice supplies it."
 )]
 impl ServerHandler for MawanServer {
     fn get_info(&self) -> ServerConfig {
@@ -516,7 +520,7 @@ impl ServerHandler for MawanServer {
         )
         .with_server_info(Implementation::new("mawan", "0.1.0"))
         .with_instructions(
-            "Ma Wan (Park Island) buses, ferries, PITCL notices, HKO weather and TD traffic. Live buses: PITCL NR330/NR332/NR334/NR338 and KMB 230R. Timetable only: NR338S, NR331, NR331S and both ferry routes. Use get_ma_wan_status for a combined disruption view and get_ma_wan_next_departures for the next bus or ferry. Times are Hong Kong time (UTC+8). HKO has no public Tsing Ma Bridge anemometer, so bridge wind stage is unknown.",
+            "Ma Wan (Park Island) buses, ferries, PITCL notices, HKO weather and TD traffic. Live buses: PITCL NR330/NR332/NR334/NR338 and KMB 230R. Timetable only: NR338S, NR331, NR331S and both ferry routes. Use get_ma_wan_status for a combined disruption view and get_ma_wan_next_departures for the next bus or ferry. Times are Hong Kong time (UTC+8). HKO has no public Tsing Ma Bridge anemometer; bridge_wind.stage is reported only when TD publishes a high-wind traffic notice.",
         )
     }
 }

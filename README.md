@@ -96,10 +96,12 @@ There is **no public Tsing Ma Bridge anemometer** in the open-data feed. The
 Tsing Yi station is shown as a regional proxy, but `bridge_wind.available` is
 `false`, so PITCL's 40/60/75 km/h thresholds are never applied automatically.
 
-When the Transport Department publishes a Tsing Ma Bridge high-wind traffic
-notice, `bridge_wind.stage` is set from that notice and `stage_source` names
-the source. This is the official stage, not an inference from nearby wind.
-Without such a notice the stage is `unknown`.
+`mawan weather` checks TD special traffic news in addition to HKO. When the
+Transport Department publishes a Tsing Ma Bridge high-wind traffic notice,
+`bridge_wind.stage` is set from that notice and `stage_source` names the source.
+This is the official stage, not an inference from nearby wind. Without such a
+notice the stage is `unknown`; a traffic-feed failure does not fail the weather
+report.
 
 ## Install
 
@@ -182,6 +184,7 @@ mawan guide contact                  # hotline, email, resident fare forms
 mawan guide weather                  # high-wind and typhoon arrangements
 mawan guide policies                 # ferry luggage, pets and on-board rules
 mawan data-info                      # effective and last-verified dates
+mawan update --check
 ```
 
 Global flags: `--json`, `--lang en|tc`, `--cache-ttl 30`, `--refresh`.
@@ -439,3 +442,8 @@ update in real time.
   reported as notes, not invented departure times.
 - Feeds can change without notice. This is an independent, unofficial project,
   not affiliated with PITCL, Sun Bus, KMB or the Transport Department.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Bus, ferry, weather and traffic data remain subject
+to PITCL, Sun Bus, KMB, HKO and Transport Department terms.

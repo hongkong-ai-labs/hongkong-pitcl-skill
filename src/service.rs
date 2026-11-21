@@ -70,6 +70,17 @@ impl Service {
         self.weather.report(lang).await
     }
 
+    /// Weather plus the official TD bridge stage when a high-wind traffic
+    /// notice is available. A traffic failure does not fail the weather report.
+    pub async fn weather_with_stage(&self, lang: &str) -> Result<WeatherReport> {
+        let (weather, traffic) = tokio::join!(self.weather(lang), self.traffic(lang, false, 0));
+        let mut report = weather?;
+        if let Ok(traffic) = traffic {
+            crate::weather::apply_traffic_bridge_stage(&mut report, &traffic.alerts, lang);
+        }
+        Ok(report)
+    }
+
     pub async fn traffic(&self, lang: &str, all: bool, limit: usize) -> Result<TrafficReport> {
         self.traffic.report(lang, all, limit).await
     }
