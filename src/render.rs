@@ -1,9 +1,13 @@
 use chrono::DateTime;
+use unicode_width::UnicodeWidthStr;
 
+use crate::data::DatasetInfo;
 use crate::ferry::{FerryFare, FerryRoute, FerryTimetable};
-use crate::model::{Eta, Fare, RouteInfo, Schedule, Stop, hkt};
+use crate::model::{Eta, Fare, OfficialStops, RouteInfo, Schedule, Stop, hkt};
 use crate::news::{NewsDetail, NewsItem};
+use crate::next::NextReport;
 use crate::pitcl::Guide;
+use crate::status::StatusReport;
 use crate::traffic::TrafficReport;
 use crate::weather::WeatherReport;
 
@@ -38,7 +42,7 @@ fn pick<'a>(lang: Lang, en: &'a str, tc: &'a str) -> &'a str {
 }
 
 fn width(text: &str) -> usize {
-    text.chars().count()
+    UnicodeWidthStr::width(text)
 }
 
 fn pad(text: &str, target: usize) -> String {
@@ -212,6 +216,7 @@ pub fn ferry_routes_table(routes: &[FerryRoute], lang: Lang) -> String {
                 route.code.clone(),
                 pick(lang, &route.name_en, &route.name_tc).to_string(),
                 pick(lang, &route.other_pier_en, &route.other_pier_tc).to_string(),
+                format!("{} min", route.journey_minutes),
                 fare_cell(route.fare.adult_visitor, route.fare.adult_resident),
                 fare_cell(route.fare.child_visitor, route.fare.child_resident),
                 fare_cell(route.fare.elderly_visitor, route.fare.elderly_resident),
@@ -223,6 +228,7 @@ pub fn ferry_routes_table(routes: &[FerryRoute], lang: Lang) -> String {
             "ROUTE",
             "SERVICE",
             "OTHER PIER",
+            "MIN",
             "ADULT V/R",
             "CHILD V/R",
             "ELDERLY V/R",
@@ -250,6 +256,37 @@ pub fn ferry_schedule_text(table: &FerryTimetable, lang: Lang) -> String {
     };
     out.push_str(&format!("\n{other}\n"));
     push_times(&mut out, &table.from_other_pier);
+    out.push_str(&format!(
+        "\n{}: about {} min / {}\n",
+        pick(lang, "Journey", "航程"),
+        table.journey_minutes,
+        pick(lang, "pier gate-closing times", "碼頭閘口關閉時間"),
+    ));
+    out.push_str(&format!(
+        "{}: {}\n{}: {}\n",
+        pick(lang, "From Park Island", "珀麗灣開出"),
+        time_range(
+            table.first_from_park_island.as_deref(),
+            table.last_from_park_island.as_deref()
+        ),
+        pick(lang, "From other pier", "其他碼頭開出"),
+        time_range(
+            table.first_from_other_pier.as_deref(),
+            table.last_from_other_pier.as_deref()
+        ),
+    ));
+    out.push_str(&format!(
+        "\n{}: {}\n{}: {}, {}\n",
+        pick(lang, "Park Island pier", "珀麗灣碼頭"),
+        pick(lang, &table.park_island_pier_en, &table.park_island_pier_tc),
+        pick(lang, "Other pier", "其他碼頭"),
+        pick(lang, &table.other_pier_en, &table.other_pier_tc),
+        pick(
+            lang,
+            &table.other_pier_address_en,
+            &table.other_pier_address_tc
+        ),
+    ));
     out.push_str(&format!("\nFare: {}\n", ferry_fare_summary(&table.fare)));
     if !table.fare.note.is_empty() {
         out.push_str(&format!("{}\n", table.fare.note));
@@ -263,6 +300,247 @@ fn push_times(out: &mut String, times: &[String]) {
         out.push_str(&chunk.join("  "));
         out.push('\n');
     }
+}
+
+fn time_range(first: Option<&str>, last: Option<&str>) -> String {
+    match (first, last) {
+        (Some(first), Some(last)) if first != last => format!("{first}–{last}"),
+        (Some(value), _) => value.to_string(),
+        _ => "-".to_string(),
+    }
+}
+
+/// Stops published by the operator but absent from live predictions. Returns
+/// `None` when the live feed already covers the published stop set.
+pub fn official_gaps(info: &RouteInfo) -> Option<String> {
+    if !info.realtime {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for official in &info.official_stops {
+        let missing: Vec<&str> = official
+            .stops
+            .iter()
+            .filter(|stop| stop.live_name_en.is_none())
+            .map(|stop| stop.name_en.as_str())
+            .collect();
+        if !missing.is_empty() {
+            parts.push(format!(
+                "dir {}: {}",
+                official.direction,
+                missing.join(", ")
+            ));
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
+}
+
+pub fn official_stops_text(stops: &[OfficialStops]) -> String {
+    let mut out = String::new();
+    for official in stops {
+        out.push_str(&format!(
+            "\nDirection {} official stops ({})\n",
+            official.direction, official.source
+        ));
+        for stop in &official.stops {
+            let coverage = match &stop.live_name_en {
+                Some(name) => format!("live: {name}"),
+                None => "not in live feed".to_string(),
+            };
+            out.push_str(&format!("- {} ({coverage})\n", stop.name_en));
+            if let Some(note) = &stop.note {
+                out.push_str(&format!("    {note}\n"));
+            }
+        }
+    }
+    out
+}
+
+pub fn status_text(report: &StatusReport, lang: Lang) -> String {
+    let mut out = format!(
+        "{}  [{}]\n{}
+",
+        pick(lang, "Ma Wan transport status", "馬灣交通狀況"),
+        report.level,
+        report.generated_at
+    );
+    out.push_str(&format!("\n{}\n", report.summary));
+    out.push_str(&format!(
+        "{}: {}\n{}: {}\n",
+        pick(lang, "Bus", "巴士"),
+        report.bus,
+        pick(lang, "Ferry", "渡輪"),
+        report.ferry
+    ));
+
+    if let Some(weather) = &report.weather {
+        if !weather.warnings.is_empty() {
+            out.push_str(&format!(
+                "\n{}\n",
+                pick(lang, "Active warnings", "生效警告")
+            ));
+            for warning in &weather.warnings {
+                out.push_str(&format!("- {}\n", warning.name));
+            }
+        }
+        if !weather.bridge_wind.available {
+            let proxy = match (
+                weather.bridge_wind.station.as_deref(),
+                weather.bridge_wind.speed_kmh,
+            ) {
+                (Some(station), Some(speed)) => {
+                    format!("{station} proxy {speed:.0} km/h")
+                }
+                _ => "no regional proxy".to_string(),
+            };
+            out.push_str(&format!(
+                "\n{}: {} ({})\n",
+                pick(lang, "Tsing Ma Bridge wind", "青馬大橋風速"),
+                pick(lang, "unknown", "未知"),
+                proxy
+            ));
+        }
+    }
+
+    if let Some(traffic) = &report.traffic {
+        out.push_str(&format!(
+            "\n{}: {} ({}/{})\n",
+            pick(lang, "TD traffic", "運輸署交通"),
+            if traffic.alerts.is_empty() {
+                pick(lang, "none relevant", "沒有相關消息")
+            } else {
+                pick(lang, "relevant messages", "相關消息")
+            },
+            traffic.alerts.len(),
+            traffic.total
+        ));
+        for alert in traffic.alerts.iter().take(3) {
+            out.push_str(&format!("- {}\n", preview(&alert.headline, 140)));
+        }
+    }
+
+    out.push_str(&format!(
+        "\n{}: {}\n",
+        pick(lang, "PITCL notices", "珀麗灣通告"),
+        report.notices.len()
+    ));
+    for notice in report.notices.iter().take(3) {
+        out.push_str(&format!("- {}\n", notice.title));
+    }
+    if !report.errors.is_empty() {
+        out.push_str(&format!(
+            "\n{}:\n",
+            pick(lang, "Feed errors", "資料來源錯誤")
+        ));
+        for error in &report.errors {
+            out.push_str(&format!("- {error}\n"));
+        }
+    }
+    out.push_str(&format!("\n{}\n", pick(lang, "Caveats", "注意")));
+    for caveat in &report.caveats {
+        out.push_str(&format!("- {caveat}\n"));
+    }
+    out
+}
+
+pub fn next_text(report: &NextReport, lang: Lang) -> String {
+    let origin = pick(lang, &report.origin_en, &report.origin_tc);
+    let mut out = format!(
+        "{} — {} ({}, {})\n",
+        pick(lang, "Next departures", "下一班出發"),
+        origin,
+        report.day.label(),
+        report.date
+    );
+    if report.departures.is_empty() {
+        out.push_str(&format!(
+            "\n{}\n",
+            pick(
+                lang,
+                "No upcoming departures found.",
+                "找不到即將出發的班次。"
+            )
+        ));
+    } else {
+        let rows = report
+            .departures
+            .iter()
+            .map(|departure| {
+                let destination = pick(lang, &departure.destination_en, &departure.destination_tc);
+                let minutes = match departure.minutes {
+                    Some(value) if value <= 0 => pick(lang, "due", "即將").to_string(),
+                    Some(value) => format!("{value} min"),
+                    None => "-".to_string(),
+                };
+                vec![
+                    departure.mode.clone(),
+                    departure.service.clone(),
+                    destination.to_string(),
+                    departure.time.clone().unwrap_or_else(|| "-".into()),
+                    minutes,
+                    departure.source.clone(),
+                ]
+            })
+            .collect();
+        out.push_str(&table(
+            &[
+                pick(lang, "MODE", "類別"),
+                pick(lang, "SERVICE", "服務"),
+                pick(lang, "TO", "往"),
+                pick(lang, "TIME", "時間"),
+                pick(lang, "IN", "尚餘"),
+                pick(lang, "SOURCE", "來源"),
+            ],
+            rows,
+        ));
+        let notes: Vec<&str> = report
+            .departures
+            .iter()
+            .filter_map(|departure| departure.note.as_deref())
+            .collect();
+        if !notes.is_empty() {
+            out.push_str(&format!("\n{}\n", pick(lang, "Notes", "備註")));
+            for note in notes {
+                out.push_str(&format!("- {note}\n"));
+            }
+        }
+    }
+    if !report.notes.is_empty() {
+        out.push_str(&format!("\n{}\n", pick(lang, "Service notes", "服務備註")));
+        for note in &report.notes {
+            out.push_str(&format!("- {note}\n"));
+        }
+    }
+    out
+}
+
+pub fn datasets_text(datasets: &[DatasetInfo], lang: Lang) -> String {
+    let rows = datasets
+        .iter()
+        .map(|dataset| {
+            vec![
+                dataset.name.clone(),
+                dataset.effective.clone().unwrap_or_else(|| "-".into()),
+                dataset.last_verified.clone(),
+            ]
+        })
+        .collect();
+    let mut out = table(
+        &[
+            pick(lang, "DATASET", "資料集"),
+            pick(lang, "EFFECTIVE", "生效日期"),
+            pick(lang, "VERIFIED", "查核日期"),
+        ],
+        rows,
+    );
+    out.push('\n');
+    for dataset in datasets {
+        out.push_str(&format!(
+            "{}: {}\n  {}\n",
+            dataset.name, dataset.source, dataset.note
+        ));
+    }
+    out
 }
 
 pub fn news_list_text(items: &[NewsItem], lang: Lang) -> String {
@@ -339,6 +617,47 @@ pub fn weather_text(report: &WeatherReport, lang: Lang) -> String {
             uv.description
         ));
     }
+
+    if !report.wind.is_empty() {
+        out.push_str(&format!("\n{}\n", pick(lang, "Regional wind", "分區風速")));
+        let rows = report
+            .wind
+            .iter()
+            .map(|observation| {
+                vec![
+                    observation.place.clone(),
+                    observation.direction.clone(),
+                    observation
+                        .speed_kmh
+                        .map(|value| format!("{value:.0}"))
+                        .unwrap_or_else(|| "-".into()),
+                    observation
+                        .gust_kmh
+                        .map(|value| format!("{value:.0}"))
+                        .unwrap_or_else(|| "-".into()),
+                ]
+            })
+            .collect();
+        out.push_str(&table(
+            &[
+                pick(lang, "PLACE", "地點"),
+                pick(lang, "DIR", "風向"),
+                pick(lang, "KM/H", "公里/小時"),
+                pick(lang, "GUST", "陣風"),
+            ],
+            rows,
+        ));
+    }
+    out.push_str(&format!(
+        "\n{}: {}\n{}\n",
+        pick(lang, "Tsing Ma Bridge wind stage", "青馬大橋強風階段"),
+        if report.bridge_wind.available {
+            report.bridge_wind.stage.clone()
+        } else {
+            pick(lang, "unknown", "未知").to_string()
+        },
+        report.bridge_wind.note
+    ));
 
     out.push_str(&format!("\n{}\n", pick(lang, "Warnings", "警告")));
     if report.warnings.is_empty() {
@@ -496,6 +815,15 @@ pub fn schedule_text(schedule: &Schedule, lang: Lang) -> String {
         schedule.day.label(),
         schedule.source
     ));
+    if let Some(effective) = &schedule.effective {
+        out.push_str(&format!(
+            "{}: {}  ·  {}: {}\n",
+            pick(lang, "Effective", "生效日期"),
+            effective,
+            pick(lang, "Verified", "查核日期"),
+            schedule.last_verified
+        ));
+    }
     if let Some(first) = &schedule.first {
         out.push_str(&format!("First {}", first));
         if let Some(last) = &schedule.last {
@@ -525,4 +853,37 @@ pub fn schedule_text(schedule: &Schedule, lang: Lang) -> String {
         out.push_str(&format!("\n{note}\n"));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Stop;
+
+    #[test]
+    fn cjk_text_uses_display_width() {
+        assert_eq!(width("珀麗灣"), 6);
+        assert_eq!(width("Park Island"), 11);
+    }
+
+    #[test]
+    fn cjk_table_rows_align() {
+        let stops = vec![
+            Stop {
+                seq: 1,
+                id: "a".into(),
+                name_en: "Park Island".into(),
+                name_tc: "珀麗灣".into(),
+            },
+            Stop {
+                seq: 2,
+                id: "b".into(),
+                name_en: "Tsing Yi Station".into(),
+                name_tc: "港鐵青衣站".into(),
+            },
+        ];
+        let table = stops_table(&stops, Lang::Tc);
+        let lines: Vec<&str> = table.lines().collect();
+        assert_eq!(width(lines[0]), width(lines[2]));
+    }
 }

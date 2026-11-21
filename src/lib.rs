@@ -1,12 +1,16 @@
+pub mod cache;
+pub mod data;
 pub mod ferry;
 pub mod kmb;
 pub mod mcp;
 pub mod model;
 pub mod news;
+pub mod next;
 pub mod pitcl;
 pub mod render;
 pub mod service;
 pub mod socif;
+pub mod status;
 pub mod timetable;
 pub mod traffic;
 pub mod weather;

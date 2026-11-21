@@ -20,7 +20,7 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 
-use crate::model::parse_day;
+use crate::model::{parse_day, parse_day_with_date};
 use crate::service::{self, Service};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -142,6 +142,26 @@ pub struct NewsArgs {
 pub struct GuideArgs {
     /// Topic: contact, weather, or policies
     pub topic: String,
+    /// Language: en or tc. Defaults to en.
+    pub lang: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct StatusArgs {
+    /// Language: en or tc. Defaults to en.
+    pub lang: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct NextArgs {
+    /// Origin: park-island, ma-wan, central, tsuen-wan, tsuen-wan-west, tsing-yi, kwai-fong, airport, or kowloon-station. Defaults to park-island.
+    pub from: Option<String>,
+    /// weekday, saturday, sunday, holiday, today, tomorrow, or YYYY-MM-DD
+    pub day: Option<String>,
+    /// Departures to show per service. Defaults to 3.
+    pub limit: Option<usize>,
+    /// Language: en or tc. Defaults to en.
+    pub lang: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -354,21 +374,65 @@ impl MawanServer {
     }
 
     #[tool(
-        description = "Static PITCL guidance that is not in the live feeds. Topics: 'contact' for the hotline, email, address and resident Octopus registration; 'weather' for the official high-wind and typhoon contingency plan (Tsing Ma Bridge wind thresholds, bus suspension, ferry strengthening); 'policies' for ferry fares, luggage, pets and on-board rules. These are published policies, not live predictions — check get_ma_wan_weather and get_ma_wan_news for the current situation."
+        description = "Static PITCL guidance that is not in the live feeds. Topics: 'contact' for the hotline, email, address and resident Octopus registration; 'weather' for the official high-wind and typhoon contingency plan (Tsing Ma Bridge wind thresholds, bus suspension, ferry strengthening); 'policies' for ferry fares, luggage, pets and on-board rules. Supports lang 'tc'. These are published policies, not live predictions — check get_ma_wan_weather and get_ma_wan_news for the current situation."
     )]
     async fn get_pitcl_guide(
         &self,
         Parameters(args): Parameters<GuideArgs>,
     ) -> Result<String, ErrorData> {
-        let guide = self.service.guide(&args.topic).map_err(mcp_error)?;
+        let lang = lang_code(args.lang.as_deref())?;
+        let guide = self.service.guide(&args.topic, lang).map_err(mcp_error)?;
         pretty(&guide)
+    }
+
+    #[tool(
+        description = "One-call Ma Wan transport status: HKO warning impact for buses and ferries, active warnings, nearest regional wind, Ma Wan-related TD traffic messages, and the latest PITCL notices. Use this first for 'is anything disrupted?' or 'are ferries running?'. There is no public PITCL real-time service-status or ferry ETA feed, so the result combines official feeds and says so."
+    )]
+    async fn get_ma_wan_status(
+        &self,
+        Parameters(args): Parameters<StatusArgs>,
+    ) -> Result<String, ErrorData> {
+        let lang = lang_code(args.lang.as_deref())?;
+        let report = self.service.status(lang).await;
+        pretty(&report)
+    }
+
+    #[tool(
+        description = "Next departures from a chosen Ma Wan origin, combining live bus ETAs, exact published timetables and ferry sailings. Origins: park-island, ma-wan, central, tsuen-wan, tsuen-wan-west, tsing-yi, kwai-fong, airport, kowloon-station. Returns up to `limit` per service with time, minutes away, destination and whether the source is live, scheduled or timetable. Ferries have no live feed."
+    )]
+    async fn get_ma_wan_next_departures(
+        &self,
+        Parameters(args): Parameters<NextArgs>,
+    ) -> Result<String, ErrorData> {
+        let lang = lang_code(args.lang.as_deref())?;
+        let (day, date) =
+            parse_day_with_date(args.day.as_deref().unwrap_or("today")).map_err(mcp_error)?;
+        let report = self
+            .service
+            .next(
+                args.from.as_deref().unwrap_or("park-island"),
+                day,
+                date,
+                args.limit.unwrap_or(3),
+                lang,
+            )
+            .await
+            .map_err(mcp_error)?;
+        pretty(&report)
+    }
+
+    #[tool(
+        description = "Provenance and freshness for the static datasets: PITCL/KMB live feeds, bus and ferry fares, published timetables, the PITCL contingency plan, passenger rules, HKO weather and TD traffic. Includes printed effective dates where the publisher provides one and the date this project last verified the source."
+    )]
+    async fn get_ma_wan_data_info(&self) -> Result<String, ErrorData> {
+        pretty(&self.service.datasets())
     }
 }
 
 #[tool_handler(
     name = "mawan",
     version = "0.1.0",
-    instructions = "Ma Wan (Park Island) transport: buses, ferries, PITCL notices, weather and traffic. Live bus data covers PITCL NR330/NR332/NR334/NR338 and KMB 230R; published timetables cover NR338S, NR331 and NR331S. Ferries (Central and Tsuen Wan) are timetable-only. Use get_ma_wan_weather for HKO warnings and forecast (they can suspend ferries or slow buses), get_ma_wan_traffic for TD special traffic news, get_ma_wan_news for operator announcements, and get_pitcl_guide for static contact, adverse-weather and passenger-policy information. All times are Hong Kong time (UTC+8); never describe static timetables as live."
+    instructions = "Ma Wan (Park Island) transport: buses, ferries, PITCL notices, weather and traffic. Live bus data covers PITCL NR330/NR332/NR334/NR338 and KMB 230R; published timetables cover NR338S, NR331 and NR331S. Ferries (Central and Tsuen Wan) are timetable-only. Start with get_ma_wan_status for disruption questions and get_ma_wan_next_departures for 'next bus/ferry'. Use get_ma_wan_weather for HKO warnings, forecast and regional wind, get_ma_wan_traffic for TD special traffic news, get_ma_wan_news for operator announcements, get_ma_wan_data_info for freshness, and get_pitcl_guide for static contact, adverse-weather and passenger-policy information. All times are Hong Kong time (UTC+8); never describe static timetables as live. HKO publishes no Tsing Ma Bridge anemometer, so bridge wind stage is unknown unless a warning or notice says otherwise."
 )]
 impl ServerHandler for MawanServer {
     fn get_info(&self) -> ServerConfig {
@@ -377,7 +441,7 @@ impl ServerHandler for MawanServer {
         )
         .with_server_info(Implementation::new("mawan", "0.1.0"))
         .with_instructions(
-            "Ma Wan (Park Island) buses, ferries, PITCL notices, HKO weather and TD traffic. Live buses: PITCL NR330/NR332/NR334/NR338 and KMB 230R. Timetable only: NR338S, NR331, NR331S and both ferry routes. Times are Hong Kong time (UTC+8). Use get_pitcl_guide for contact details, typhoon/high-wind plans and passenger rules.",
+            "Ma Wan (Park Island) buses, ferries, PITCL notices, HKO weather and TD traffic. Live buses: PITCL NR330/NR332/NR334/NR338 and KMB 230R. Timetable only: NR338S, NR331, NR331S and both ferry routes. Use get_ma_wan_status for a combined disruption view and get_ma_wan_next_departures for the next bus or ferry. Times are Hong Kong time (UTC+8). HKO has no public Tsing Ma Bridge anemometer, so bridge wind stage is unknown.",
         )
     }
 }

@@ -10,10 +10,10 @@
 //! PITCL NR330/NR332/NR334/NR338 timetables are fetched live from the
 //! operator's ETA backend instead; see `socif.rs`.
 
+use crate::data::LAST_VERIFIED;
 use crate::model::{
     DayType, DirectionInfo, Fare, Frequency, OfficialStop, OfficialStops, RouteInfo, Schedule,
 };
-use crate::data::LAST_VERIFIED;
 
 pub const ROUTES: &[&str] = &[
     "NR330", "NR332", "NR334", "NR338", "NR338S", "NR331", "NR331S", "230R",
@@ -201,6 +201,26 @@ pub fn route(code: &str) -> Option<RouteInfo> {
                     "Resident offer until 31 Dec 2026: $22.00 adult, $11.00 child/elderly.".into(),
                 ),
             }),
+            effective: Some("2025-09-01".into()),
+            last_verified: LAST_VERIFIED.into(),
+            official_stops: vec![
+                official(1, "PITCL NR338S leaflet, effective 2025-09-01", vec![
+                    timetable_stop("Park Island", "珀麗灣"),
+                    timetable_stop("Ma Wan 1868 / Noah's Ark / Beach Commercial Complex", "馬灣1868／挪亞方舟／臨海廣場"),
+                    timetable_stop("Kei Wai Primary School", "基慧小學"),
+                    timetable_stop("Tin Liu New Village", "田寮新村"),
+                    timetable_stop("MTR Hong Kong Station", "港鐵香港站"),
+                    timetable_stop("Central (Pier 2)", "中環（二號碼頭）"),
+                ]),
+                official(2, "PITCL NR338S leaflet, effective 2025-09-01", vec![
+                    timetable_stop("Central (Pier 2)", "中環（二號碼頭）"),
+                    timetable_stop("MTR Hong Kong Station", "港鐵香港站"),
+                    timetable_stop("Ma Wan 1868 / Noah's Ark / Beach Commercial Complex", "馬灣1868／挪亞方舟／臨海廣場"),
+                    timetable_stop("Kei Wai Primary School", "基慧小學"),
+                    timetable_stop("Tin Liu New Village", "田寮新村"),
+                    timetable_stop("Park Island", "珀麗灣"),
+                ]),
+            ],
             notes: vec![
                 "Daytime ferry-replacement service. No public real-time feed; times are the published timetable.".into(),
             ],
@@ -216,9 +236,38 @@ pub fn route(code: &str) -> Option<RouteInfo> {
                 dir(1, "Ma Wan (Pak Yan Road)", "馬灣（珀欣路）", "Tsuen Wan Station", "荃灣站"),
                 dir(2, "Tsuen Wan Station", "荃灣站", "Ma Wan (Pak Yan Road)", "馬灣（珀欣路）"),
             ],
-            fare: None,
+            fare: Some(Fare {
+                adult_visitor: Some(15.60),
+                adult_resident: Some(9.60),
+                child_visitor: Some(15.60),
+                child_resident: Some(9.60),
+                elderly_visitor: Some(9.60),
+                elderly_resident: Some(9.60),
+                note: Some(
+                    "Flat fare; registered Octopus holders pay the resident fare. Section fare $2.00 within Ma Wan. KMB interchange discount applies.".into(),
+                ),
+            }),
+            effective: None,
+            last_verified: LAST_VERIFIED.into(),
+            official_stops: vec![
+                official(1, "TD Schedule of Services NR331", vec![
+                    timetable_stop("Pak Yan Road near Ma Wan Fire Station", "珀欣路近馬灣消防局"),
+                    timetable_stop("Ma Wan Rural Committee Road opposite Ma Wan Refuse Collection Point 1", "馬灣鄉事會路馬灣垃圾收集站1對面"),
+                    timetable_stop("Ma Wan Rural Committee Road outside House No. 310, Ma Wan Main Street Village North", "馬灣鄉事會路馬灣大街村北310號外"),
+                    timetable_stop("Pak Lam Road outside C.C.C. Kei Wai Primary School (Ma Wan)", "珀林路中華基督教會基慧小學（馬灣）外"),
+                    timetable_stop("Sai Lau Kok Road lay-by outside Tsuen Wan Station Multi-storey Carpark Building", "西樓角路荃灣站多層停車場大樓外停車灣"),
+                ]),
+                official(2, "TD Schedule of Services NR331", vec![
+                    timetable_stop("Sai Lau Kok Road lay-by outside Tsuen Wan Station Multi-storey Carpark Building", "西樓角路荃灣站多層停車場大樓外停車灣"),
+                    timetable_stop("Pak Lam Road opposite C.C.C. Kei Wai Primary School (Ma Wan)", "珀林路中華基督教會基慧小學（馬灣）對面"),
+                    timetable_stop("Pak Lam Road opposite Park Island Block 21", "珀林路珀麗灣第21座對面"),
+                    timetable_stop("Ma Wan Rural Committee Road outside Ma Wan Refuse Collection Point 1", "馬灣鄉事會路馬灣垃圾收集站1外"),
+                    timetable_stop("Pak Yan Road near Ma Wan Fire Station", "珀欣路近馬灣消防局"),
+                ]),
+            ],
             notes: vec![
                 "Circular service. The return leg is shown as a frequency because Sun Bus does not publish exact return times.".into(),
+                "Fares checked 2026-11-22; the TD sheet prints no effective date.".into(),
             ],
         },
         "NR331S" => RouteInfo {
@@ -232,9 +281,40 @@ pub fn route(code: &str) -> Option<RouteInfo> {
                 dir(1, "Ma Wan (Pak Yan Road)", "馬灣（珀欣路）", "Tsuen Wan West", "荃灣西"),
                 dir(2, "Tsuen Wan West", "荃灣西", "Ma Wan (Pak Yan Road)", "馬灣（珀欣路）"),
             ],
-            fare: None,
+            fare: Some(Fare {
+                adult_visitor: Some(16.30),
+                adult_resident: Some(10.00),
+                child_visitor: Some(16.30),
+                child_resident: Some(10.00),
+                elderly_visitor: Some(10.00),
+                elderly_resident: Some(10.00),
+                note: Some(
+                    "Flat fare; registered Octopus holders pay the resident fare. Section fare $2.00 within Ma Wan. KMB interchange discount applies.".into(),
+                ),
+            }),
+            effective: None,
+            last_verified: LAST_VERIFIED.into(),
+            official_stops: vec![
+                official(1, "TD Schedule of Services NR331S", vec![
+                    timetable_stop("Pak Yan Road near Ma Wan Fire Station", "珀欣路近馬灣消防局"),
+                    timetable_stop("Ma Wan Rural Committee Road opposite Ma Wan Refuse Collection Point 1", "馬灣鄉事會路馬灣垃圾收集站1對面"),
+                    timetable_stop("Ma Wan Rural Committee Road outside House No. 310, Ma Wan Main Street Village North", "馬灣鄉事會路馬灣大街村北310號外"),
+                    timetable_stop("Pak Lam Road opposite C.C.C. Kei Wai Primary School (Ma Wan)", "珀林路中華基督教會基慧小學（馬灣）對面"),
+                    timetable_stop("Tai Ho Road North southbound lay-by near Tsuen Wan Station", "大河道北南行近荃灣站停車灣"),
+                    timetable_stop("Tai Ho Road lay-by outside Nina Tower Bus Terminus", "大河道如心廣場巴士總站外停車灣"),
+                ]),
+                official(2, "TD Schedule of Services NR331S", vec![
+                    timetable_stop("Tai Ho Road lay-by outside Nina Tower Bus Terminus", "大河道如心廣場巴士總站外停車灣"),
+                    timetable_stop("Tai Ho Road North northbound lay-by near Tsuen Wan Station", "大河道北北行近荃灣站停車灣"),
+                    timetable_stop("Pak Lam Road opposite C.C.C. Kei Wai Primary School (Ma Wan)", "珀林路中華基督教會基慧小學（馬灣）對面"),
+                    timetable_stop("Pak Lam Road opposite Park Island Block 21", "珀林路珀麗灣第21座對面"),
+                    timetable_stop("Ma Wan Rural Committee Road outside Ma Wan Refuse Collection Point 1", "馬灣鄉事會路馬灣垃圾收集站1外"),
+                    timetable_stop("Pak Yan Road near Ma Wan Fire Station", "珀欣路近馬灣消防局"),
+                ]),
+            ],
             notes: vec![
                 "Circular service. The return leg is shown as a frequency because Sun Bus does not publish exact return times.".into(),
+                "Fares checked 2026-11-22; the TD sheet prints no effective date.".into(),
             ],
         },
         "230R" => RouteInfo {
@@ -251,8 +331,12 @@ pub fn route(code: &str) -> Option<RouteInfo> {
             fare: Some(Fare::adult(15.50, None).with_note(
                 "Same-day return and interchange discounts apply.",
             )),
+            effective: None,
+            last_verified: LAST_VERIFIED.into(),
+            official_stops: vec![],
             notes: vec![
                 "KMB direction 1 is the operator's outbound direction (Kowloon Station → Ma Wan).".into(),
+                "KMB's live route-stop list is the official stop set; it covers every stop in both directions.".into(),
             ],
         },
         _ => return None,
@@ -267,6 +351,57 @@ fn dir(seq: u8, orig_en: &str, orig_tc: &str, dest_en: &str, dest_tc: &str) -> D
         orig_tc: orig_tc.into(),
         dest_en: dest_en.into(),
         dest_tc: dest_tc.into(),
+    }
+}
+
+fn official(seq: u8, source: &str, stops: Vec<OfficialStop>) -> OfficialStops {
+    OfficialStops {
+        direction: seq,
+        source: source.into(),
+        stops,
+    }
+}
+
+fn live(name_en: &str, name_tc: &str) -> OfficialStop {
+    OfficialStop {
+        name_en: name_en.into(),
+        name_tc: name_tc.into(),
+        live_name_en: Some(name_en.into()),
+        live_name_tc: Some(name_tc.into()),
+        note: None,
+    }
+}
+
+fn timetable_stop(name_en: &str, name_tc: &str) -> OfficialStop {
+    OfficialStop {
+        name_en: name_en.into(),
+        name_tc: name_tc.into(),
+        live_name_en: None,
+        live_name_tc: None,
+        note: None,
+    }
+}
+
+fn airport_terminal(name_en: &str, name_tc: &str, note: &str) -> OfficialStop {
+    OfficialStop {
+        name_en: name_en.into(),
+        name_tc: name_tc.into(),
+        live_name_en: Some("Airport".into()),
+        live_name_tc: Some("機場".into()),
+        note: Some(note.into()),
+    }
+}
+
+fn hzmb() -> OfficialStop {
+    OfficialStop {
+        name_en: "HZMB Passenger Clearance Building".into(),
+        name_tc: "港珠澳大橋香港口岸旅檢大樓".into(),
+        live_name_en: None,
+        live_name_tc: None,
+        note: Some(
+            "Selected departures only: drop-off outbound and pick-up inbound. Not in the live stop list."
+                .into(),
+        ),
     }
 }
 
@@ -295,6 +430,8 @@ fn exact(route: &str, seq: u8, day: DayType, times: &[&str], note: impl Into<Str
         last: times.last().map(|value| (*value).to_string()),
         departures: times.iter().map(|value| (*value).to_string()).collect(),
         frequencies: vec![],
+        effective: info.effective.clone(),
+        last_verified: info.last_verified.clone(),
         note: Some(note.into()),
     }
 }
@@ -332,6 +469,8 @@ fn frequency(
         last: rows.last().and_then(|row| row.1).map(str::to_string),
         departures: vec![],
         frequencies,
+        effective: info.effective.clone(),
+        last_verified: info.last_verified.clone(),
         note: Some(note.into()),
     }
 }
@@ -515,5 +654,45 @@ mod tests {
         assert_eq!(schedule.source, "official-frequency");
         assert_eq!(schedule.frequencies.len(), 4);
         assert_eq!(schedule.frequencies[1].min_minutes, Some(20));
+    }
+
+    #[test]
+    fn sun_bus_fares_are_attached() {
+        let nr331 = route("NR331").unwrap().fare.expect("NR331 fare");
+        assert_eq!(nr331.adult_visitor, Some(15.60));
+        assert_eq!(nr331.adult_resident, Some(9.60));
+        let nr331s = route("NR331S").unwrap().fare.expect("NR331S fare");
+        assert_eq!(nr331s.adult_visitor, Some(16.30));
+        assert_eq!(nr331s.adult_resident, Some(10.00));
+    }
+
+    #[test]
+    fn nr334_official_stops_include_hzmb_and_terminals() {
+        let info = route("NR334").unwrap();
+        let outbound = info
+            .official_stops
+            .iter()
+            .find(|stops| stops.direction == 1)
+            .unwrap();
+        assert!(
+            outbound
+                .stops
+                .iter()
+                .any(|stop| stop.name_en.contains("HZMB"))
+        );
+        assert!(
+            outbound
+                .stops
+                .iter()
+                .any(|stop| stop.name_en.contains("Terminal 2"))
+        );
+    }
+
+    #[test]
+    fn nr331_official_stops_cover_both_directions() {
+        let info = route("NR331").unwrap();
+        assert_eq!(info.official_stops.len(), 2);
+        assert_eq!(info.official_stops[0].stops.len(), 5);
+        assert_eq!(info.official_stops[1].stops.len(), 5);
     }
 }

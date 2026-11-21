@@ -297,6 +297,8 @@ pub fn build_schedule(
         last,
         departures,
         frequencies,
+        effective: None,
+        last_verified: "live".into(),
         note: None,
     }
 }

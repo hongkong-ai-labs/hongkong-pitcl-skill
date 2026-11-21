@@ -6,6 +6,7 @@
 
 use serde::Serialize;
 
+use crate::data::LAST_VERIFIED;
 use crate::model::DayType;
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,9 +25,17 @@ pub struct FerryRoute {
     pub code: String,
     pub name_en: String,
     pub name_tc: String,
+    pub park_island_pier_en: String,
+    pub park_island_pier_tc: String,
     pub other_pier_en: String,
     pub other_pier_tc: String,
+    pub other_pier_address_en: String,
+    pub other_pier_address_tc: String,
+    /// Published crossing time in minutes (Transport Department).
+    pub journey_minutes: u32,
     pub fare: FerryFare,
+    pub effective: Option<String>,
+    pub last_verified: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,15 +46,29 @@ pub struct FerryTimetable {
     pub day: DayType,
     pub from_park_island: Vec<String>,
     pub from_other_pier: Vec<String>,
+    pub park_island_pier_en: String,
+    pub park_island_pier_tc: String,
     pub other_pier_en: String,
     pub other_pier_tc: String,
+    pub other_pier_address_en: String,
+    pub other_pier_address_tc: String,
+    pub journey_minutes: u32,
+    pub first_from_park_island: Option<String>,
+    pub last_from_park_island: Option<String>,
+    pub first_from_other_pier: Option<String>,
+    pub last_from_other_pier: Option<String>,
     pub fare: FerryFare,
+    pub effective: Option<String>,
+    pub last_verified: String,
     pub note: String,
 }
 
 pub const ROUTES: &[&str] = &["central", "tsuen-wan"];
 
+const EFFECTIVE: &str = "2025-08-17";
 const NOTE: &str = "Published timetable effective 17 August 2025. Times are pier gate-closing times. No public real-time ferry feed. The $2 concession applies to eligible Octopus cardholders.";
+const PARK_ISLAND_PIER_EN: &str = "Park Island Ferry Pier, 8 Pak Lai Road, Ma Wan";
+const PARK_ISLAND_PIER_TC: &str = "珀麗灣碼頭（馬灣珀萊路8號）";
 
 const CENTRAL_WEEKDAY_PI: &[&str] = &[
     "06:30", "07:00", "07:20", "08:00", "08:20", "09:00", "09:30", "10:00", "12:00", "14:00",
@@ -102,17 +125,31 @@ pub fn route(code: &str) -> Option<FerryRoute> {
             code: code.into(),
             name_en: "Park Island ↔ Central".into(),
             name_tc: "珀麗灣 ↔ 中環".into(),
+            park_island_pier_en: PARK_ISLAND_PIER_EN.into(),
+            park_island_pier_tc: PARK_ISLAND_PIER_TC.into(),
             other_pier_en: "Central Pier No. 2".into(),
             other_pier_tc: "中環二號碼頭".into(),
+            other_pier_address_en: "Man Kwong Street, Central".into(),
+            other_pier_address_tc: "中環民光街".into(),
+            journey_minutes: 22,
             fare: central_fare(),
+            effective: Some(EFFECTIVE.into()),
+            last_verified: LAST_VERIFIED.into(),
         },
         "tsuen-wan" => FerryRoute {
             code: code.into(),
             name_en: "Park Island ↔ Tsuen Wan".into(),
             name_tc: "珀麗灣 ↔ 荃灣".into(),
+            park_island_pier_en: PARK_ISLAND_PIER_EN.into(),
+            park_island_pier_tc: PARK_ISLAND_PIER_TC.into(),
             other_pier_en: "Tsuen Wan Pier".into(),
             other_pier_tc: "荃灣碼頭".into(),
+            other_pier_address_en: "Tsuen Wan Ferry Pier, Tsuen Wan".into(),
+            other_pier_address_tc: "荃灣渡輪碼頭".into(),
+            journey_minutes: 12,
             fare: tsuen_wan_fare(),
+            effective: Some(EFFECTIVE.into()),
+            last_verified: LAST_VERIFIED.into(),
         },
         _ => return None,
     })
@@ -128,16 +165,29 @@ pub fn schedule(code: &str, day: DayType) -> Option<FerryTimetable> {
         "tsuen-wan" => (TSUEN_WAN_WEEKEND_PI, TSUEN_WAN_WEEKEND_OTHER),
         _ => return None,
     };
+    let from_park_island = strings(from_park_island);
+    let from_other_pier = strings(from_other_pier);
     Some(FerryTimetable {
         route: info.code,
         route_en: info.name_en,
         route_tc: info.name_tc,
         day,
-        from_park_island: strings(from_park_island),
-        from_other_pier: strings(from_other_pier),
+        first_from_park_island: from_park_island.first().cloned(),
+        last_from_park_island: from_park_island.last().cloned(),
+        first_from_other_pier: from_other_pier.first().cloned(),
+        last_from_other_pier: from_other_pier.last().cloned(),
+        from_park_island,
+        from_other_pier,
+        park_island_pier_en: info.park_island_pier_en,
+        park_island_pier_tc: info.park_island_pier_tc,
         other_pier_en: info.other_pier_en,
         other_pier_tc: info.other_pier_tc,
+        other_pier_address_en: info.other_pier_address_en,
+        other_pier_address_tc: info.other_pier_address_tc,
+        journey_minutes: info.journey_minutes,
         fare: info.fare,
+        effective: info.effective,
+        last_verified: info.last_verified,
         note: NOTE.into(),
     })
 }
@@ -176,5 +226,24 @@ mod tests {
         let table = schedule("tsuen-wan", DayType::Sunday).unwrap();
         assert_eq!(table.from_park_island, vec!["10:10", "13:10", "16:10"]);
         assert_eq!(table.fare.adult_visitor, 12.00);
+    }
+
+    #[test]
+    fn ferry_routes_carry_journey_times_and_piers() {
+        let central = route("central").unwrap();
+        assert_eq!(central.journey_minutes, 22);
+        assert!(central.other_pier_address_en.contains("Man Kwong Street"));
+        assert!(central.park_island_pier_en.contains("Pak Lai Road"));
+        let tsuen_wan = route("tsuen-wan").unwrap();
+        assert_eq!(tsuen_wan.journey_minutes, 12);
+    }
+
+    #[test]
+    fn timetable_exposes_first_and_last_sailings() {
+        let table = schedule("central", DayType::Weekday).unwrap();
+        assert_eq!(table.first_from_park_island.as_deref(), Some("06:30"));
+        assert_eq!(table.last_from_park_island.as_deref(), Some("21:00"));
+        assert_eq!(table.first_from_other_pier.as_deref(), Some("07:00"));
+        assert_eq!(table.last_from_other_pier.as_deref(), Some("21:30"));
     }
 }

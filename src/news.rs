@@ -10,6 +10,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
+use crate::cache::ResponseCache;
+
 const BASE: &str = "https://www.pitcl.com.hk";
 const USER_AGENT: &str = "mawan/0.1 (Ma Wan bus CLI; +https://github.com/)";
 
@@ -30,17 +32,21 @@ pub struct NewsDetail {
 
 pub struct NewsClient {
     http: reqwest::Client,
+    cache: ResponseCache,
 }
 
 impl NewsClient {
-    pub fn new() -> Result<Self> {
+    pub fn new(ttl: Duration) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .danger_accept_invalid_certs(true)
             .timeout(Duration::from_secs(20))
             .build()
             .context("building PITCL news client")?;
-        Ok(Self { http })
+        Ok(Self {
+            http,
+            cache: ResponseCache::new(ttl),
+        })
     }
 
     pub async fn list(&self, lang: &str, limit: usize) -> Result<Vec<NewsItem>> {
@@ -100,6 +106,9 @@ impl NewsClient {
 
     async fn get(&self, path: &str) -> Result<String> {
         let url = format!("{BASE}{path}");
+        if let Some(body) = self.cache.get(&url) {
+            return Ok(body);
+        }
         let response = self
             .http
             .get(&url)
@@ -117,6 +126,7 @@ impl NewsClient {
                 body.chars().take(160).collect::<String>()
             );
         }
+        self.cache.insert(url, body.clone());
         Ok(body)
     }
 }

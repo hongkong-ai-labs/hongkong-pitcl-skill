@@ -20,12 +20,7 @@ pub struct DatasetInfo {
     pub note: String,
 }
 
-fn dataset(
-    name: &str,
-    source: &str,
-    effective: Option<&str>,
-    note: &str,
-) -> DatasetInfo {
+fn dataset(name: &str, source: &str, effective: Option<&str>, note: &str) -> DatasetInfo {
     DatasetInfo {
         name: name.to_string(),
         source: source.to_string(),

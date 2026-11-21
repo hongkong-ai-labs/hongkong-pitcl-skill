@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use ma_wan_bus::mcp::{self, McpArgs};
-use ma_wan_bus::model::parse_day;
+use ma_wan_bus::model::{parse_day, parse_day_with_date};
 use ma_wan_bus::render::{self, Lang};
 use ma_wan_bus::service::{self, Service};
 use serde_json::json;
@@ -29,6 +29,10 @@ struct Cli {
     /// Cache API responses for N seconds (0 disables)
     #[arg(long, global = true, default_value_t = 30)]
     cache_ttl: u64,
+
+    /// Ignore cached responses for this run
+    #[arg(long, global = true)]
+    refresh: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -107,6 +111,22 @@ enum Command {
         #[command(subcommand)]
         command: GuideCommand,
     },
+    /// Combined weather impact, relevant traffic and PITCL notices
+    Status,
+    /// Next buses and ferries from a chosen origin
+    Next {
+        /// park-island, ma-wan, central, tsuen-wan, tsuen-wan-west, tsing-yi, kwai-fong, airport, kowloon-station
+        #[arg(long, default_value = "park-island")]
+        from: String,
+        /// weekday, saturday, sunday, holiday, today, tomorrow, or YYYY-MM-DD
+        #[arg(long, default_value = "today")]
+        day: String,
+        /// Departures to show per service (default 3)
+        #[arg(long, short, default_value_t = 3)]
+        limit: usize,
+    },
+    /// Provenance and freshness of the static datasets
+    DataInfo,
     /// Run the MCP server over stdio or streamable HTTP
     Mcp(McpArgs),
 }
@@ -151,11 +171,12 @@ async fn run() -> Result<()> {
     let lang = Lang::parse(&cli.lang)
         .ok_or_else(|| anyhow!("--lang must be en or tc (got '{}')", cli.lang))?;
 
+    let cache_ttl = if cli.refresh { 0 } else { cli.cache_ttl };
     if let Command::Mcp(args) = cli.command {
-        return mcp::run(args, Duration::from_secs(cli.cache_ttl)).await;
+        return mcp::run(args, Duration::from_secs(cache_ttl)).await;
     }
 
-    let service = Service::new(Duration::from_secs(cli.cache_ttl))?;
+    let service = Service::new(Duration::from_secs(cache_ttl))?;
 
     match cli.command {
         Command::Routes => {
@@ -202,6 +223,9 @@ async fn run() -> Result<()> {
                 }
                 for note in &info.notes {
                     println!("{:<14}{}", "Note:", note);
+                }
+                if let Some(gaps) = render::official_gaps(&info) {
+                    println!("{:<14}{}", "Official gaps:", gaps);
                 }
                 for (direction, stops) in [("1", &first), ("2", &second)] {
                     println!("\nDirection {direction}");
@@ -308,11 +332,36 @@ async fn run() -> Result<()> {
                 GuideCommand::Weather => "weather",
                 GuideCommand::Policies => "policies",
             };
-            let guide = service.guide(topic)?;
+            let guide = service.guide(topic, lang.code())?;
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&guide)?);
             } else {
                 print!("{}", render::guide_text(&guide));
+            }
+        }
+        Command::Status => {
+            let report = service.status(lang.code()).await;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", render::status_text(&report, lang));
+            }
+        }
+        Command::Next { from, day, limit } => {
+            let (day, date) = parse_day_with_date(&day).map_err(anyhow::Error::msg)?;
+            let report = service.next(&from, day, date, limit, lang.code()).await?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", render::next_text(&report, lang));
+            }
+        }
+        Command::DataInfo => {
+            let datasets = service.datasets();
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&datasets)?);
+            } else {
+                print!("{}", render::datasets_text(&datasets, lang));
             }
         }
         Command::Mcp(_) => unreachable!("handled above"),

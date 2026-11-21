@@ -13,6 +13,8 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use serde::Serialize;
 
+use crate::cache::ResponseCache;
+
 const BASE: &str = "https://resource.data.one.gov.hk/td";
 const USER_AGENT: &str = "mawan/0.1 (Ma Wan transport CLI; +https://github.com/)";
 
@@ -42,38 +44,48 @@ pub struct TrafficReport {
 
 pub struct TrafficClient {
     http: reqwest::Client,
+    cache: ResponseCache,
 }
 
 impl TrafficClient {
-    pub fn new() -> Result<Self> {
+    pub fn new(ttl: Duration) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .timeout(Duration::from_secs(20))
             .build()
             .context("building traffic client")?;
-        Ok(Self { http })
+        Ok(Self {
+            http,
+            cache: ResponseCache::new(ttl),
+        })
     }
 
     pub async fn report(&self, lang: &str, all: bool, limit: usize) -> Result<TrafficReport> {
         let url = format!("{BASE}/{lang}/specialtrafficnews.xml");
-        let response = self
-            .http
-            .get(&url)
-            .header(reqwest::header::ACCEPT, "application/xml")
-            .send()
-            .await
-            .with_context(|| format!("GET {url}"))?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .with_context(|| format!("reading {url}"))?;
-        if !status.is_success() {
-            bail!(
-                "TD traffic feed returned HTTP {status}: {}",
-                body.chars().take(160).collect::<String>()
-            );
-        }
+        let body = if let Some(body) = self.cache.get(&url) {
+            body
+        } else {
+            let response = self
+                .http
+                .get(&url)
+                .header(reqwest::header::ACCEPT, "application/xml")
+                .send()
+                .await
+                .with_context(|| format!("GET {url}"))?;
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .with_context(|| format!("reading {url}"))?;
+            if !status.is_success() {
+                bail!(
+                    "TD traffic feed returned HTTP {status}: {}",
+                    body.chars().take(160).collect::<String>()
+                );
+            }
+            self.cache.insert(&url, body.clone());
+            body
+        };
         let mut alerts = parse_xml(&body, lang)?;
         let total = alerts.len();
         let relevant = alerts.iter().filter(|alert| alert.relevant).count();

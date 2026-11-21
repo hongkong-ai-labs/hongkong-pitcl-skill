@@ -4,13 +4,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
+use chrono::NaiveDate;
 
+use crate::data::{self, DatasetInfo};
 use crate::ferry::{self, FerryRoute, FerryTimetable};
 use crate::kmb::KmbClient;
 use crate::model::{DayType, Eta, RouteInfo, Schedule, Stop};
 use crate::news::{NewsClient, NewsDetail, NewsItem};
+use crate::next::{self, NextReport};
 use crate::pitcl::{self, Guide};
 use crate::socif::{self, SocifClient};
+use crate::status::{self, StatusReport};
 use crate::timetable;
 use crate::traffic::{TrafficClient, TrafficReport};
 use crate::weather::{WeatherClient, WeatherReport};
@@ -28,19 +32,38 @@ impl Service {
         Ok(Self {
             socif: Arc::new(SocifClient::new(cache_ttl)?),
             kmb: Arc::new(KmbClient::new(cache_ttl)?),
-            news: Arc::new(NewsClient::new()?),
-            weather: Arc::new(WeatherClient::new()?),
-            traffic: Arc::new(TrafficClient::new()?),
+            news: Arc::new(NewsClient::new(cache_ttl)?),
+            weather: Arc::new(WeatherClient::new(cache_ttl)?),
+            traffic: Arc::new(TrafficClient::new(cache_ttl)?),
         })
     }
 
-    pub fn guide(&self, topic: &str) -> Result<Guide> {
-        pitcl::guide(topic).ok_or_else(|| {
+    pub fn guide(&self, topic: &str, lang: &str) -> Result<Guide> {
+        pitcl::guide(topic, lang).ok_or_else(|| {
             anyhow!(
                 "unknown guide topic '{topic}'; use {}",
                 pitcl::TOPICS.join(", ")
             )
         })
+    }
+
+    pub fn datasets(&self) -> Vec<DatasetInfo> {
+        data::datasets()
+    }
+
+    pub async fn status(&self, lang: &str) -> StatusReport {
+        status::gather(self, lang).await
+    }
+
+    pub async fn next(
+        &self,
+        origin: &str,
+        day: DayType,
+        date: NaiveDate,
+        limit: usize,
+        lang: &str,
+    ) -> Result<NextReport> {
+        next::gather(self, origin, day, date, limit, lang).await
     }
 
     pub async fn weather(&self, lang: &str) -> Result<WeatherReport> {
@@ -213,6 +236,27 @@ fn stop(seq: u16, id: &str, en: &str, tc: &str) -> Stop {
 }
 
 pub fn static_stops(code: &str, direction: u8) -> Vec<Stop> {
+    // For routes without a live feed, the official stop list is the stop list.
+    if let Some(info) = timetable::route(code)
+        && let Some(official) = info
+            .official_stops
+            .iter()
+            .find(|official| official.direction == direction)
+        && !official.stops.is_empty()
+    {
+        return official
+            .stops
+            .iter()
+            .enumerate()
+            .map(|(index, official)| Stop {
+                seq: (index + 1) as u16,
+                id: format!("{}-{direction}-{}", info.code, index + 1),
+                name_en: official.name_en.clone(),
+                name_tc: official.name_tc.clone(),
+            })
+            .collect();
+    }
+
     if code.eq_ignore_ascii_case("NR338S") {
         return if direction == 1 {
             vec![
