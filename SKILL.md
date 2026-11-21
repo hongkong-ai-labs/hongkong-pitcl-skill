@@ -24,7 +24,10 @@ Use it when the user asks about:
 - luggage, pet or on-board rules for the ferry
 - whether a route has real-time data or only a timetable
 - first/last buses, weekday vs Saturday/Sunday/public-holiday times
-- stops and direction of travel
+- stops and direction of travel, including official stops missing from live predictions
+- the next bus or ferry from Park Island, Ma Wan, Central, Tsuen Wan or the town-side termini
+- a combined disruption status from weather, traffic and PITCL notices
+- how fresh a fare, timetable or policy is
 
 ## Before first use
 
@@ -94,11 +97,20 @@ mawan weather --lang tc --json
 mawan traffic --json          # Ma Wan-related TD messages
 mawan traffic --all --json    # every territory-wide TD message
 
-# Static PITCL guidance
+# Combined status and next departures
+mawan status --json
+mawan next --from park-island --limit 3 --json
+mawan next --from ma-wan --json
+mawan next --from central --day tomorrow --json
+
+# Static PITCL guidance and data freshness
 mawan guide contact --json
 mawan guide weather --json     # high wind / typhoon plan
 mawan guide policies --json    # ferry luggage, pets, on-board rules
+mawan data-info --json
 ```
+
+`--refresh` bypasses the response cache for one run.
 
 Direction `1` is the operator's outbound direction and `2` is inbound. For
 230R, `1` is Kowloon Station → Ma Wan.
@@ -122,18 +134,32 @@ Never describe NR331, NR331S, NR338S or ferry sailings as live. `mawan eta`
 returns a clear error for them. Use the schedule commands instead.
 
 Weather comes live from the Hong Kong Observatory; `get_ma_wan_weather`
-returns active warnings, nearest-station temperatures, rainfall and the local
-forecast, plus a `pitcl_impact` object with separate bus and ferry guidance.
-Traffic comes live from the Transport Department. The default traffic view is
-filtered to Ma Wan-related messages; `--all` returns every territory-wide
-message. A weather warning or road closure is an official advisory, not a
-guarantee that a specific sailing or bus is cancelled.
+returns active warnings, nearest-station temperatures, rainfall, regional wind
+and the local forecast, plus a `pitcl_impact` object with separate bus and
+ferry guidance. Traffic comes live from the Transport Department. The default
+traffic view is filtered to Ma Wan-related messages; `--all` returns every
+territory-wide message. A weather warning or road closure is an official
+advisory, not a guarantee that a specific sailing or bus is cancelled.
+
+`mawan status` combines those feeds with the latest PITCL notices. It says
+explicitly that no public PITCL real-time service-status feed exists. Use it
+before answering "are ferries running?" or "is anything disrupted?".
+
+`mawan next` combines live bus ETAs, exact timetables and ferry sailings. Use
+`--from park-island`, `ma-wan`, `central`, `tsuen-wan`, `tsuen-wan-west`,
+`tsing-yi`, `kwai-fong`, `airport` or `kowloon-station`. Ferry times are
+timetable values, never live.
 
 Do **not** assume T8 means every bus is cancelled. PITCL's published plan says
 ferries suspend about 2 hours after T8, while buses may continue until Stage 2
 high-wind management on Tsing Ma Bridge (>75 km/h) suspends them. At T3,
 ferries may be limited or suspended but buses normally continue. The impact
-text is English-only.
+text follows `--lang tc`.
+
+HKO's open regional wind feed has **no Tsing Ma Bridge anemometer**. The tool
+returns Tsing Yi as a regional proxy, sets `bridge_wind.available` to `false`
+and leaves the bridge stage `unknown`. Never apply the 40/60/75 km/h thresholds
+from the proxy alone.
 
 Weekday PITCL timetables are exact clock times. Saturday, Sunday and public
 holiday PITCL timetables are frequency windows, because that is how the
@@ -158,8 +184,18 @@ a timetable estimate, not vehicle tracking. Say "scheduled" rather than
 "live" for those rows.
 
 `mawan route <code> --json` includes a `fare` object with adult, child and
-elderly fares where PITCL publishes them, plus a note about resident Octopus
-fares. Ferries return the same fare shape from `mawan ferry routes --json`.
+elderly fares where the operator publishes them, plus a note about resident
+Octopus fares. NR331/NR331S now carry Sun Bus fares. Ferries return the same
+fare shape from `mawan ferry routes --json`, plus journey minutes and pier
+addresses.
+
+Each route also carries `official_stops` per direction. `live_name_en` and
+`live_name_tc` show the matching live-feed name, or `null` when the stop is
+published but absent from live predictions. NR334's HZMB call and separate
+Terminal 1/2 stops are the main live-feed gaps.
+
+`mawan data-info --json` lists the source, printed effective date where one
+exists, and the last-verified date for every static dataset.
 
 PITCL notices are listed newest first with links to the official page; the
 site does not expose publication dates, so do not invent one. Read a notice
@@ -175,7 +211,8 @@ mawan mcp --transport http --port 8788
 Tools: `list_ma_wan_routes`, `get_ma_wan_route`, `get_ma_wan_stops`,
 `get_ma_wan_arrivals`, `get_ma_wan_schedule`, `get_ma_wan_news`,
 `list_ma_wan_ferries`, `get_ma_wan_ferry_schedule`, `get_ma_wan_weather`,
-`get_ma_wan_traffic`, `get_pitcl_guide`.
+`get_ma_wan_traffic`, `get_ma_wan_status`, `get_ma_wan_next_departures`,
+`get_ma_wan_data_info`, `get_pitcl_guide`.
 
 ## Cautions
 
@@ -192,10 +229,12 @@ Tools: `list_ma_wan_routes`, `get_ma_wan_route`, `get_ma_wan_stops`,
   Present it as published guidance, not as the current operational status.
 - `guide policies` covers the ferry Notes to Passengers; the bus notes PDF is
   image-only, so link to it rather than inventing bus rules.
-- `mawan guide` is English-only; do not present it as translated even when the
-  global `--lang tc` flag is set.
+- Do not infer Tsing Ma Bridge Stage 1/2 from the Tsing Yi wind proxy; HKO has
+  no public bridge anemometer. `bridge_wind.available` is false by design.
 - Traffic relevance is keyword-based; use `--all` if an incident may have
   knock-on effects outside the Ma Wan corridor.
+- `mawan next` does not invent times for frequency-only return legs; report the
+  note and point to `mawan schedule` instead.
 - PITCL notices have no machine-readable dates; report them in site order and
   do not invent a date.
 - Do not present this data as official; it is an independent client of public

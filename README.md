@@ -8,13 +8,16 @@ fares and notices, and exposes everything over a CLI and MCP.
 
 - **Live bus ETA:** PITCL NR330, NR332, NR334, NR338; KMB 230R
 - **Bus timetables:** NR330, NR332, NR334, NR338, NR338S, NR331, NR331S, 230R
-- **Fares:** published adult, child and elderly fares where the operator lists them
-- **Ferries:** Park Island ↔ Central Pier No. 2 and Park Island ↔ Tsuen Wan
-- **Weather:** current HKO conditions, active warnings and the local forecast
+- **Fares:** published adult, child and elderly fares, including Sun Bus NR331/NR331S
+- **Ferries:** Park Island ↔ Central Pier No. 2 and Park Island ↔ Tsuen Wan, with journey times and pier addresses
+- **Status:** one call combining weather impact, relevant TD traffic and PITCL notices
+- **Next departures:** next bus and ferry from Park Island, Ma Wan or the town-side termini
+- **Weather:** current HKO conditions, active warnings, local forecast and regional wind
 - **Traffic:** real-time TD special traffic news, filtered to the Ma Wan corridor
 - **PITCL news:** latest operator notices in English or Traditional Chinese
-- **PITCL guidance:** hotline, typhoon/high-wind plan and passenger policies
-- **Stops and directions** for every bus route
+- **PITCL guidance:** hotline, typhoon/high-wind plan and passenger policies, in English or Chinese
+- **Data freshness:** effective dates and last-verified dates for every static dataset
+- **Stops and directions** for every bus route, including structured official stop lists
 - **MCP server** over stdio and streamable HTTP
 - **Agent skill** (`SKILL.md`) plus a binary bootstrap script
 
@@ -47,22 +50,27 @@ Island Transport, and its live ETAs come from KMB's open data at
 | NR334 | HK$32.50 | — | no resident fare; $2 concession not applicable |
 | NR338 | HK$32.00 | HK$24.50 | overnight |
 | NR338S | HK$39.00 | HK$24.10 | child $19.50/$12.10, elderly $12.10/$12.10; resident offer $22.00/$11.00 until 31 Dec 2026 |
+| NR331 | HK$15.60 | HK$9.60 | Sun Bus flat fare; child same as adult; section fare $2.00 within Ma Wan |
+| NR331S | HK$16.30 | HK$10.00 | Sun Bus flat fare; child same as adult; section fare $2.00 within Ma Wan |
 | 230R | HK$15.50 | — | KMB fare |
 
 Use `mawan route <code>` for the full fare object, including child and
-elderly fares. Sun Bus does not publish NR331/NR331S fares in the sources used
-here, so those are omitted rather than guessed.
+elderly fares. Sun Bus fares require a registered Octopus card for the
+resident rate; the TD sheet does not print an effective date, so
+`mawan data-info` records the last verification date instead.
 
 ## Ferries
 
-| Route | Other pier | Weekday sailings | Weekend/holiday sailings |
-| --- | --- | --- | --- |
-| `central` | Central Pier No. 2 | 19 each way | 7 each way |
-| `tsuen-wan` | Tsuen Wan Pier | 3 each way | 3 each way |
+| Route | Other pier | Journey | Weekday sailings | Weekend/holiday sailings |
+| --- | --- | --- | --- | --- |
+| `central` | Central Pier No. 2, Man Kwong Street | about 22 min | 19 each way | 7 each way |
+| `tsuen-wan` | Tsuen Wan Ferry Pier | about 12 min | 3 each way | 3 each way |
 
-Ferry times are pier gate-closing times. Fares: Central $36.00 adult visitor /
-$24.10 resident; Tsuen Wan $12.00 / $10.20. Child and elderly fares are
-roughly half and are returned in full by `mawan ferry routes --json`.
+Boarding is at Park Island Ferry Pier, 8 Pak Lai Road, Ma Wan. Ferry times are
+pier gate-closing times. Fares: Central $36.00 adult visitor / $24.10 resident;
+Tsuen Wan $12.00 / $10.20. Child and elderly fares are roughly half and are
+returned in full by `mawan ferry routes --json`. `mawan ferry schedule` also
+returns first/last sailings and the pier addresses.
 
 ## Weather impact
 
@@ -78,7 +86,13 @@ treat a T8 as an automatic bus cancellation:
 - **Rainstorm:** expect delays; PITCL's published plan has no automatic
   suspension.
 
-The impact text is English-only; the warnings and forecast follow `--lang tc`.
+The impact text, guide and headings follow `--lang tc`.
+
+`mawan weather` also includes HKO's regional 10-minute wind observations.
+There is **no public Tsing Ma Bridge anemometer** in the open-data feed. The
+Tsing Yi station is shown as a regional proxy, but `bridge_wind.available` is
+`false` and the bridge stage is `unknown`, so PITCL's 40/60/75 km/h thresholds
+are never applied automatically.
 
 ## Install
 
@@ -117,17 +131,25 @@ mawan ferry routes                  # ferry routes, piers and fares
 mawan ferry schedule central --day weekday
 mawan ferry schedule tsuen-wan --day sunday --json
 
-mawan weather                        # HKO conditions, warnings and forecast
+mawan weather                        # HKO conditions, warnings, forecast and wind
 mawan weather --lang tc
 mawan traffic                        # TD news affecting Ma Wan
 mawan traffic --all --limit 10       # every territory-wide message
 
+mawan status                         # weather impact + traffic + PITCL notices
+mawan status --lang tc
+mawan next                           # next buses and ferries from Park Island
+mawan next --from ma-wan --limit 3   # NR331, NR331S, NR338S and 230R
+mawan next --from central --day tomorrow
+
 mawan guide contact                  # hotline, email, resident fare forms
 mawan guide weather                  # high-wind and typhoon arrangements
 mawan guide policies                 # ferry luggage, pets and on-board rules
+mawan data-info                      # effective and last-verified dates
 ```
 
-Global flags: `--json`, `--lang en|tc`, `--cache-ttl 30`.
+Global flags: `--json`, `--lang en|tc`, `--cache-ttl 30`, `--refresh`.
+`--refresh` bypasses the in-process cache for that run.
 
 Direction `1` is the operator's outbound direction and `2` is inbound. For
 230R that means `1` is Kowloon Station → Ma Wan.
@@ -185,8 +207,11 @@ Tools:
 | `get_ma_wan_news` | latest PITCL notices; pass an `id` for full text |
 | `list_ma_wan_ferries` | ferry routes, piers and fares |
 | `get_ma_wan_ferry_schedule` | ferry sailings by day type |
-| `get_ma_wan_weather` | HKO weather, warnings, forecast and PITCL impact |
+| `get_ma_wan_weather` | HKO weather, warnings, forecast, regional wind and PITCL impact |
 | `get_ma_wan_traffic` | TD special traffic news, Ma Wan-related by default |
+| `get_ma_wan_status` | combined weather impact, traffic and PITCL notices |
+| `get_ma_wan_next_departures` | next buses and ferries from a chosen origin |
+| `get_ma_wan_data_info` | effective and last-verified dates for static data |
 | `get_pitcl_guide` | contact, adverse-weather plan and passenger policies |
 
 ## Agent skill
@@ -230,7 +255,9 @@ update in real time.
 - **Ferries** — PITCL ferry timetables effective 17 August 2025, linked from
   `pitcl.com.hk/en/ferry_service.php`.
 - **Weather** — Hong Kong Observatory Open Data API (`rhrread`, `warnsum`,
-  `flw`), selecting the stations and rainfall districts nearest Ma Wan.
+  `flw`), selecting the stations and rainfall districts nearest Ma Wan. The
+  regional 10-minute wind CSV supplies Tsing Yi, Chek Lap Kok, Cheung Chau,
+  Central Pier and Waglan Island; it has no Tsing Ma Bridge station.
 - **Traffic** — Transport Department Special Traffic News XML. The feed is
   territory-wide, so messages are flagged by whether they mention Ma Wan, the
   ferry piers, the airport corridor, Tsing Yi/Kwai Fong/Tsuen Wan or a
@@ -240,13 +267,19 @@ update in real time.
   the hostname, so those read-only requests accept the certificate.
 - **Guidance** — PITCL's contact page, the high-wind/typhoon contingency PDF
   (PAX Notice 2018.08) and the ferry Notes to Passengers.
-- **Official stops** — route notes flag where the live feed covers fewer stops
-  than the operator's PDF, notably NR334 HZMB/Terminal 1–2 and NR338 Harbour Centre.
+- **Official stops** — every route/direction carries an `official_stops` list
+  with a `live_name_en`/`live_name_tc` mapping. That makes differences
+  machine-readable: NR334's HZMB call and separate Terminal 1/2 stops are the
+  main live-feed gaps; NR338's Harbour Centre and Tin Liu calls are already in
+  the inbound live list.
+- **Freshness** — `mawan data-info` lists the source, printed effective date
+  where one exists, and the date this project last verified each static dataset.
 
 ## Limits
 
 - NR331, NR331S and NR338S have no public real-time feed. `mawan eta` says so
-  instead of inventing a prediction.
+  instead of inventing a prediction. Their stop lists are the official TD/PITCL
+  lists rather than live predictions.
 - Weekend and public-holiday PITCL timetables are frequency windows; only the
   weekday timetable is published as exact clock times by the feed.
 - The return legs of NR331/NR331S are circular services and are shown as
@@ -264,7 +297,11 @@ update in real time.
 - The adverse-weather plan is PITCL's published 2018 contingency notice; it is
   still linked from the site, but actual arrangements can change. Always check
   current PITCL notices and HKO warnings.
-- `mawan guide` and the `pitcl_impact` text are English-only; the live weather,
-  traffic and notice commands support `--lang tc`.
+- HKO publishes no Tsing Ma Bridge wind station in its open regional wind feed.
+  The tool reports the nearest regional wind and explicitly leaves the bridge
+  stage unknown rather than inferring Stage 1/2.
+- `mawan next` uses live ETAs where available and published times otherwise.
+  Return legs published only as frequency windows (NR331/NR331S from town) are
+  reported as notes, not invented departure times.
 - Feeds can change without notice. This is an independent, unofficial project,
   not affiliated with PITCL, Sun Bus, KMB or the Transport Department.

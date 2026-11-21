@@ -100,6 +100,7 @@ pub async fn gather(
         .ok_or_else(|| anyhow!("unknown origin '{origin}'; use {}", ORIGINS.join(", ")))?;
     let limit = limit.max(1);
     let now = Utc::now().with_timezone(&hkt());
+    let today = date == now.date_naive();
     let mut departures = Vec::new();
     let mut notes = Vec::new();
 
@@ -128,11 +129,35 @@ pub async fn gather(
                 &mut notes,
             )?;
             for route in ["NR330", "NR332", "NR334", "NR338"] {
-                add_live(service, route, 1, now, limit, &mut departures, &mut notes).await?;
+                add_live_or_schedule(
+                    service,
+                    route,
+                    1,
+                    day,
+                    date,
+                    today,
+                    now,
+                    limit,
+                    &mut departures,
+                    &mut notes,
+                )
+                .await?;
             }
         }
         "ma-wan" => {
-            add_live(service, "230R", 2, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "230R",
+                2,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
             for route in ["NR331", "NR331S", "NR338S"] {
                 add_schedule(
                     service,
@@ -160,7 +185,19 @@ pub async fn gather(
                 &mut departures,
                 &mut notes,
             )?;
-            add_live(service, "NR338", 2, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "NR338",
+                2,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
             add_schedule(
                 service,
                 "NR338S",
@@ -198,16 +235,64 @@ pub async fn gather(
             );
         }
         "tsing-yi" => {
-            add_live(service, "NR330", 2, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "NR330",
+                2,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
         }
         "kwai-fong" => {
-            add_live(service, "NR332", 2, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "NR332",
+                2,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
         }
         "airport" => {
-            add_live(service, "NR334", 2, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "NR334",
+                2,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
         }
         "kowloon-station" => {
-            add_live(service, "230R", 1, now, limit, &mut departures, &mut notes).await?;
+            add_live_or_schedule(
+                service,
+                "230R",
+                1,
+                day,
+                date,
+                today,
+                now,
+                limit,
+                &mut departures,
+                &mut notes,
+            )
+            .await?;
         }
         _ => bail!("origin {origin} is not configured"),
     }
@@ -224,6 +309,29 @@ pub async fn gather(
         departures,
         notes,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn add_live_or_schedule(
+    service: &Service,
+    route: &str,
+    direction: u8,
+    day: DayType,
+    date: NaiveDate,
+    today: bool,
+    now: DateTime<FixedOffset>,
+    limit: usize,
+    departures: &mut Vec<Departure>,
+    notes: &mut Vec<String>,
+) -> Result<()> {
+    if today {
+        add_live(service, route, direction, now, limit, departures, notes).await
+    } else {
+        add_schedule(
+            service, route, direction, day, date, now, limit, departures, notes,
+        )
+        .await
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
