@@ -31,7 +31,7 @@ fn pick<'a>(lang: &str, en: &'a str, tc: &'a str) -> &'a str {
 pub async fn gather(service: &Service, lang: &str) -> StatusReport {
     let (weather, traffic, notices) = tokio::join!(
         service.weather(lang),
-        service.traffic(lang, false, 5),
+        service.traffic(lang, false, 0),
         service.news(lang, 5)
     );
 

@@ -109,6 +109,7 @@ mawan guide contact --json
 mawan guide weather --json     # high wind / typhoon plan
 mawan guide policies --json    # ferry luggage, pets, on-board rules
 mawan data-info --json
+mawan update --check
 ```
 
 `--refresh` bypasses the response cache for one run.
@@ -145,6 +146,9 @@ advisory, not a guarantee that a specific sailing or bus is cancelled.
 `mawan status` combines those feeds with the latest PITCL notices. It says
 explicitly that no public PITCL real-time service-status feed exists. Use it
 before answering "are ferries running?" or "is anything disrupted?".
+
+`mawan weather` and `mawan status` apply the same optional TD bridge-stage
+extraction, so both report an official Stage I/II/III when one is published.
 
 `mawan route <code> --json` includes route geometry where the operator publishes
 it: `shape` is the encoded polyline and `geometry` is a GeoJSON `LineString`

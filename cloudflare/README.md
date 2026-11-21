@@ -52,10 +52,11 @@ claude mcp add --transport http mawan \
 container locally:
 
 ```bash
-npx wrangler dev
+npx wrangler dev --port 8787
 ```
 
-Use `http://localhost:8788/mcp` as the MCP URL.
+Use `http://localhost:8787/mcp` as the Worker MCP URL. Port 8788 is the
+container's internal port and is not exposed directly.
 
 ## Transport
 
