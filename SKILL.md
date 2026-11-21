@@ -1,6 +1,6 @@
 ---
 name: ma-wan-bus
-description: Live and scheduled transport for Ma Wan / Park Island, Hong Kong — PITCL buses NR330, NR332, NR334, NR338, NR338S; Sun Bus NR331 and NR331S; KMB 230R; Park Island ferries to Central and Tsuen Wan; fares; HKO weather warnings and forecasts; TD special traffic news; PITCL notices, contact details, typhoon/high-wind plans and passenger policies. Use for real-time arrivals, timetables, ferry sailings, stops, fares, weather, traffic, service changes, lost property, luggage/pet rules, or any question about getting to or from Ma Wan.
+description: Live and scheduled transport for Ma Wan / Park Island, Hong Kong — PITCL buses NR330, NR332, NR334, NR338, NR338S; Sun Bus NR331 and NR331S; KMB 230R; Park Island ferries to Central and Tsuen Wan; fares; HKO weather warnings and forecasts; TD special traffic news; PITCL notices, contact details, typhoon/high-wind plans and passenger policies; combined disruption status, next departures and dataset freshness. Use for real-time arrivals, timetables, ferry sailings, stops, fares, weather, traffic, service changes, lost property, luggage/pet rules, or any question about getting to or from Ma Wan.
 license: MIT
 ---
 

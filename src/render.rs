@@ -388,10 +388,14 @@ pub fn status_text(report: &StatusReport, lang: Lang) -> String {
                 weather.bridge_wind.station.as_deref(),
                 weather.bridge_wind.speed_kmh,
             ) {
-                (Some(station), Some(speed)) => {
-                    format!("{station} proxy {speed:.0} km/h")
-                }
-                _ => "no regional proxy".to_string(),
+                (Some(station), Some(speed)) => format!(
+                    "{} {} {:.0} {}",
+                    station,
+                    pick(lang, "proxy", "參考"),
+                    speed,
+                    pick(lang, "km/h", "公里/小時")
+                ),
+                _ => pick(lang, "no regional proxy", "沒有區域參考").to_string(),
             };
             out.push_str(&format!(
                 "\n{}: {} ({})\n",
@@ -445,6 +449,12 @@ pub fn status_text(report: &StatusReport, lang: Lang) -> String {
 
 pub fn next_text(report: &NextReport, lang: Lang) -> String {
     let origin = pick(lang, &report.origin_en, &report.origin_tc);
+    let today = chrono::Utc::now()
+        .with_timezone(&hkt())
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
+    let show_minutes = report.date == today;
     let mut out = format!(
         "{} — {} ({}, {})\n",
         pick(lang, "Next departures", "下一班出發"),
@@ -467,10 +477,14 @@ pub fn next_text(report: &NextReport, lang: Lang) -> String {
             .iter()
             .map(|departure| {
                 let destination = pick(lang, &departure.destination_en, &departure.destination_tc);
-                let minutes = match departure.minutes {
-                    Some(value) if value <= 0 => pick(lang, "due", "即將").to_string(),
-                    Some(value) => format!("{value} min"),
-                    None => "-".to_string(),
+                let minutes = if !show_minutes {
+                    "-".to_string()
+                } else {
+                    match departure.minutes {
+                        Some(value) if value <= 0 => pick(lang, "due", "即將").to_string(),
+                        Some(value) => format!("{value} min"),
+                        None => "-".to_string(),
+                    }
                 };
                 vec![
                     departure.mode.clone(),
@@ -500,8 +514,11 @@ pub fn next_text(report: &NextReport, lang: Lang) -> String {
             .collect();
         if !notes.is_empty() {
             out.push_str(&format!("\n{}\n", pick(lang, "Notes", "備註")));
+            let mut seen = std::collections::BTreeSet::new();
             for note in notes {
-                out.push_str(&format!("- {note}\n"));
+                if seen.insert(note) {
+                    out.push_str(&format!("- {note}\n"));
+                }
             }
         }
     }

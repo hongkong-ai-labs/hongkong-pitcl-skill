@@ -346,7 +346,7 @@ impl MawanServer {
     }
 
     #[tool(
-        description = "Current Hong Kong Observatory weather relevant to Ma Wan, plus a PITCL-specific impact assessment: temperatures at the nearest stations, humidity, rainfall, UV, active warnings (typhoon, rainstorm, thunderstorm, monsoon), the local forecast, and separate bus/ferry guidance. A T8 does not automatically cancel buses: ferries suspend about 2 hours after T8, while buses continue until Stage 2 high-wind management on Tsing Ma Bridge (>75 km/h)."
+        description = "Current Hong Kong Observatory weather relevant to Ma Wan, plus a PITCL-specific impact assessment: temperatures at the nearest stations, humidity, rainfall, UV, regional 10-minute wind, active warnings (typhoon, rainstorm, thunderstorm, monsoon), the local forecast, and separate bus/ferry guidance. A T8 does not automatically cancel buses: ferries suspend about 2 hours after T8, while buses continue until Stage 2 high-wind management on Tsing Ma Bridge (>75 km/h). HKO's open wind feed has no Tsing Ma Bridge station, so bridge_wind.available is false and the bridge stage is unknown."
     )]
     async fn get_ma_wan_weather(
         &self,

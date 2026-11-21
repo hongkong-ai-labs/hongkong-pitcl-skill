@@ -225,7 +225,7 @@ async fn run() -> Result<()> {
                     println!("{:<14}{}", "Note:", note);
                 }
                 if let Some(gaps) = render::official_gaps(&info) {
-                    println!("{:<14}{}", "Official gaps:", gaps);
+                    println!("{:<14} {}", "Official gaps:", gaps);
                 }
                 for (direction, stops) in [("1", &first), ("2", &second)] {
                     println!("\nDirection {direction}");
