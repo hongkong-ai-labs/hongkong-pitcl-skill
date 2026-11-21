@@ -109,6 +109,7 @@ report.
 
 ```bash
 npx skills add hongkong-ai-labs/hongkong-pitcl-skill
+npx skills update        # refresh the installed skill later
 ```
 
 **Prebuilt binary** — macOS (Intel or Apple silicon) and Linux (x86_64 or
@@ -124,6 +125,8 @@ curl -fsSL https://raw.githubusercontent.com/hongkong-ai-labs/hongkong-pitcl-ski
 git clone https://github.com/hongkong-ai-labs/hongkong-pitcl-skill
 cd hongkong-pitcl-skill
 cargo install --path . --locked
+# or directly from GitHub:
+cargo install --git https://github.com/hongkong-ai-labs/hongkong-pitcl-skill --locked
 # or: cargo build --release --locked   # target/release/mawan
 ```
 
@@ -142,6 +145,10 @@ Verify the install:
 $ mawan --version
 mawan 0.1.0
 ```
+
+`mawan update` detects whether the binary came from cargo, the release
+installer, a source checkout or Homebrew, and updates with that same
+method. `mawan update --check` only reports.
 
 ## CLI
 
@@ -242,6 +249,20 @@ Client configuration for stdio:
 }
 ```
 
+Register it with any MCP client:
+
+```bash
+npx add-mcp "$(command -v mawan) mcp" --name mawan -a claude-code -a codex -a cursor -y
+claude mcp add mawan -- mawan mcp
+codex mcp add mawan -- mawan mcp
+```
+
+`add-mcp` detects the client configuration files in the current project; add
+`-g` for a global install. `$(command -v mawan)` keeps the entry correct
+when the binary is on `PATH`; substitute an absolute path if your client does
+not inherit the shell `PATH`.
+
+
 HTTP transport serves `POST /mcp` and `GET /health` on `127.0.0.1:8788`.
 `GET /health` stays public. When an API key is configured, `/mcp` requires
 `Authorization: Bearer <key>` (or `X-API-Key: <key>`); requests without it
@@ -337,6 +358,12 @@ cargo test --all --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
+
+`rust-toolchain.toml` pins the stable toolchain with `rustfmt` and
+`clippy`, so `rustup` sets contributors up automatically. `just doc`
+builds the API documentation. See `CONTRIBUTING.md` for the full check
+list and the signed-commit requirement.
+
 
 CI runs the same checks. Dependabot proposes weekly Cargo and GitHub Actions
 updates, and the audit workflow checks the lockfile against the RustSec
