@@ -1,0 +1,51 @@
+[package]
+name = "ma-wan-bus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "Ma Wan (Park Island) buses, ferries, weather, traffic and PITCL guidance as a CLI and MCP server"
+license = "MIT"
+repository = "https://github.com/hongkong-ai-labs/hongkong-pitcl-skill"
+readme = "README.md"
+keywords = ["hong-kong", "ma-wan", "park-island", "bus", "mcp"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "mawan"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+futures = "0.3"
+quick-xml = "0.38"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rmcp = { version = "3.11", features = [
+    "server",
+    "macros",
+    "transport-io",
+    "transport-streamable-http-server",
+    "schemars",
+] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "io-std",
+    "net",
+    "signal",
+    "sync",
+    "time",
+] }
+tokio-util = "0.7"
+tower-http = { version = "0.6", features = ["cors"] }
+
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
+panic = "abort"
