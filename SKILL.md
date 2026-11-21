@@ -54,6 +54,30 @@ there may be no checkout to build from. In that case install the binary first
 with `cargo install --path .` from a clone, or point `MAWAN_BIN` at a built
 `mawan` binary.
 
+### Install the binary directly
+
+`npx skills add` installs the skill files. If the binary is missing, install it
+with the release installer or cargo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hongkong-ai-labs/hongkong-pitcl-skill/main/scripts/install.sh | sh
+# or
+cargo install --git https://github.com/hongkong-ai-labs/hongkong-pitcl-skill --locked
+```
+
+Register it with any MCP client:
+
+```bash
+npx add-mcp "$(command -v mawan) mcp" --name mawan -a claude-code -a codex -a cursor -y
+claude mcp add mawan -- mawan mcp
+codex mcp add mawan -- mawan mcp
+```
+
+`add-mcp` detects the client configuration files in the current project; add
+`-g` for a global install. `$(command -v mawan)` keeps the entry correct
+when the binary is on `PATH`; substitute an absolute path if your client does
+not inherit the shell `PATH`.
+
 ## CLI
 
 Prefer `--json` for anything you need to parse. Tables are for humans.
@@ -109,6 +133,7 @@ mawan guide contact --json
 mawan guide weather --json     # high wind / typhoon plan
 mawan guide policies --json    # ferry luggage, pets, on-board rules
 mawan data-info --json
+mawan update --check
 ```
 
 `--refresh` bypasses the response cache for one run.
@@ -145,6 +170,9 @@ advisory, not a guarantee that a specific sailing or bus is cancelled.
 `mawan status` combines those feeds with the latest PITCL notices. It says
 explicitly that no public PITCL real-time service-status feed exists. Use it
 before answering "are ferries running?" or "is anything disrupted?".
+
+`mawan weather` and `mawan status` apply the same optional TD bridge-stage
+extraction, so both report an official Stage I/II/III when one is published.
 
 `mawan route <code> --json` includes route geometry where the operator publishes
 it: `shape` is the encoded polyline and `geometry` is a GeoJSON `LineString`

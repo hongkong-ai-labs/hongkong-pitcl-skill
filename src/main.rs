@@ -10,6 +10,8 @@ use ma_wan_bus::render::{self, Lang};
 use ma_wan_bus::service::{self, Service};
 use serde_json::json;
 
+mod update;
+
 #[derive(Parser)]
 #[command(
     name = "mawan",
@@ -127,6 +129,15 @@ enum Command {
     },
     /// Provenance and freshness of the static datasets
     DataInfo,
+    /// Update this binary using the method it was installed with
+    Update {
+        /// Only report the current version, latest release and install method
+        #[arg(long)]
+        check: bool,
+        /// Reinstall even when the current version is up to date
+        #[arg(long)]
+        force: bool,
+    },
     /// Run the MCP server over stdio or streamable HTTP
     Mcp(McpArgs),
 }
@@ -320,7 +331,7 @@ async fn run() -> Result<()> {
             }
         },
         Command::Weather => {
-            let report = service.weather(lang.code()).await?;
+            let report = service.weather_with_stage(lang.code()).await?;
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -372,6 +383,9 @@ async fn run() -> Result<()> {
             } else {
                 print!("{}", render::datasets_text(&datasets, lang));
             }
+        }
+        Command::Update { check, force } => {
+            update::run(check, force)?;
         }
         Command::Mcp(_) => unreachable!("handled above"),
     }
