@@ -397,10 +397,15 @@ pub fn status_text(report: &StatusReport, lang: Lang) -> String {
                 ),
                 _ => pick(lang, "no regional proxy", "沒有區域參考").to_string(),
             };
+            let stage = if weather.bridge_wind.stage == "unknown" {
+                pick(lang, "unknown", "未知").to_string()
+            } else {
+                weather.bridge_wind.stage.clone()
+            };
             out.push_str(&format!(
                 "\n{}: {} ({})\n",
-                pick(lang, "Tsing Ma Bridge wind", "青馬大橋風速"),
-                pick(lang, "unknown", "未知"),
+                pick(lang, "Tsing Ma Bridge stage", "青馬大橋階段"),
+                stage,
                 proxy
             ));
         }
@@ -668,13 +673,16 @@ pub fn weather_text(report: &WeatherReport, lang: Lang) -> String {
     out.push_str(&format!(
         "\n{}: {}\n{}\n",
         pick(lang, "Tsing Ma Bridge wind stage", "青馬大橋強風階段"),
-        if report.bridge_wind.available {
-            report.bridge_wind.stage.clone()
-        } else {
-            pick(lang, "unknown", "未知").to_string()
-        },
+        report.bridge_wind.stage,
         report.bridge_wind.note
     ));
+    if let Some(source) = &report.bridge_wind.stage_source {
+        out.push_str(&format!(
+            "{}: {}\n",
+            pick(lang, "Stage source", "階段來源"),
+            source
+        ));
+    }
 
     out.push_str(&format!("\n{}\n", pick(lang, "Warnings", "警告")));
     if report.warnings.is_empty() {

@@ -91,6 +91,12 @@ pub struct DirectionInfo {
     pub orig_tc: String,
     pub dest_en: String,
     pub dest_tc: String,
+    /// Google-encoded polyline as published by the operator feed, when any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shape: Option<String>,
+    /// The same shape as a GeoJSON LineString (`[longitude, latitude]`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<crate::geo::LineString>,
 }
 
 impl DirectionInfo {

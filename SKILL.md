@@ -7,7 +7,8 @@ license: MIT
 # Ma Wan transport
 
 `mawan` is a Rust CLI and MCP server for Ma Wan (Park Island) buses, ferries
-and PITCL notices. It needs no API key and no account. It is an independent,
+and PITCL notices. The CLI and stdio MCP server need no API key or account. The
+HTTP MCP transport accepts an optional static API key. It is an independent,
 unofficial project.
 
 Use it when the user asks about:
@@ -145,6 +146,11 @@ advisory, not a guarantee that a specific sailing or bus is cancelled.
 explicitly that no public PITCL real-time service-status feed exists. Use it
 before answering "are ferries running?" or "is anything disrupted?".
 
+`mawan route <code> --json` includes route geometry where the operator publishes
+it: `shape` is the encoded polyline and `geometry` is a GeoJSON `LineString`
+with `[longitude, latitude]` coordinates. Do not synthesise a route or a shape
+when those fields are absent; say the operator does not publish geometry.
+
 `mawan next` combines live bus ETAs, exact timetables and ferry sailings. Use
 `--from park-island`, `ma-wan`, `central`, `tsuen-wan`, `tsuen-wan-west`,
 `tsing-yi`, `kwai-fong`, `airport` or `kowloon-station`. Ferry times are
@@ -157,9 +163,11 @@ ferries may be limited or suspended but buses normally continue. The impact
 text follows `--lang tc`.
 
 HKO's open regional wind feed has **no Tsing Ma Bridge anemometer**. The tool
-returns Tsing Yi as a regional proxy, sets `bridge_wind.available` to `false`
-and leaves the bridge stage `unknown`. Never apply the 40/60/75 km/h thresholds
-from the proxy alone.
+returns Tsing Yi as a regional proxy and sets `bridge_wind.available` to
+`false`. When TD publishes a Tsing Ma Bridge high-wind traffic notice,
+`bridge_wind.stage` is the official Stage I/II/III and `stage_source` says so.
+Otherwise the stage is `unknown`. Never apply the 40/60/75 km/h thresholds from
+the proxy alone, and never derive Stage 1/2 from wind speed.
 
 Weekday PITCL timetables are exact clock times. Saturday, Sunday and public
 holiday PITCL timetables are frequency windows, because that is how the
@@ -204,9 +212,14 @@ in full with `mawan news --id <id>` (add `--lang tc` for Chinese).
 ## MCP
 
 ```bash
-mawan mcp                          # stdio
+mawan mcp                          # stdio, no auth
 mawan mcp --transport http --port 8788
+mawan mcp --transport http --port 8788 --api-key "$SECRET"
 ```
+
+When a key is configured, send `Authorization: Bearer <key>` or
+`X-API-Key: <key>` to `/mcp`. `/health` stays public. The key can also come
+from `MAWAN_MCP_API_KEY` or `MAWAN_API_KEY`; `--auth-token` is an alias.
 
 Tools: `list_ma_wan_routes`, `get_ma_wan_route`, `get_ma_wan_stops`,
 `get_ma_wan_arrivals`, `get_ma_wan_schedule`, `get_ma_wan_news`,
@@ -230,7 +243,9 @@ Tools: `list_ma_wan_routes`, `get_ma_wan_route`, `get_ma_wan_stops`,
 - `guide policies` covers the ferry Notes to Passengers; the bus notes PDF is
   image-only, so link to it rather than inventing bus rules.
 - Do not infer Tsing Ma Bridge Stage 1/2 from the Tsing Yi wind proxy; HKO has
-  no public bridge anemometer. `bridge_wind.available` is false by design.
+  no public bridge anemometer. `bridge_wind.available` is false by design. Use
+  `bridge_wind.stage` only when TD has published an official high-wind notice.
+- Do not invent route geometry. Report `geometry`/`shape` only when present.
 - Traffic relevance is keyword-based; use `--all` if an incident may have
   knock-on effects outside the Ma Wan corridor.
 - `mawan next` does not invent times for frequency-only return legs; report the

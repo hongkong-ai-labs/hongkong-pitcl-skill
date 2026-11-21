@@ -366,6 +366,9 @@ pub struct MetaDirection {
     pub dest_en: String,
     #[serde(default)]
     pub dest_tc: String,
+    /// Google-encoded route path. Older feed responses omit it.
+    #[serde(default)]
+    pub shape: Option<String>,
     #[serde(default)]
     pub headways: Vec<Headway>,
 }
@@ -380,12 +383,23 @@ impl MetaDirection {
     }
 
     pub fn info(&self) -> DirectionInfo {
+        let shape = self
+            .shape
+            .as_deref()
+            .map(str::trim)
+            .filter(|shape| !shape.is_empty())
+            .map(str::to_string);
+        let geometry = shape
+            .as_deref()
+            .and_then(crate::geo::LineString::from_encoded);
         DirectionInfo {
             seq: self.route_seq,
             orig_en: self.orig_en.clone(),
             orig_tc: self.orig_tc.clone(),
             dest_en: self.dest_en.clone(),
             dest_tc: self.dest_tc.clone(),
+            shape,
+            geometry,
         }
     }
 }

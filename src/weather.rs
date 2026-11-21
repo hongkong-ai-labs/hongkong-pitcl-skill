@@ -11,6 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::cache::ResponseCache;
+use crate::traffic::TrafficAlert;
 
 const BASE: &str = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php";
 const WIND_URL: &str =
@@ -85,8 +86,16 @@ pub struct BridgeWind {
     pub station: Option<String>,
     pub speed_kmh: Option<f64>,
     pub gust_kmh: Option<f64>,
-    /// `unknown` because the published bridge thresholds cannot be applied.
+    /// `stage-1`, `stage-2`, `stage-3`, or `unknown`. When TD publishes a
+    /// high-wind traffic-management notice, that official stage is used even
+    /// though no bridge anemometer is available.
     pub stage: String,
+    /// `TD special traffic news` when the stage came from a notice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage_source: Option<String>,
+    /// The TD headline that stated the stage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage_evidence: Option<String>,
     pub note: String,
     pub source: String,
 }
@@ -282,13 +291,75 @@ fn bridge_wind(wind: &[WindObservation], lang: &str) -> BridgeWind {
         speed_kmh: observation.and_then(|observation| observation.speed_kmh),
         gust_kmh: observation.and_then(|observation| observation.gust_kmh),
         stage: "unknown".into(),
+        stage_source: None,
+        stage_evidence: None,
         note: text(
             lang,
-            "HKO's open regional wind feed has no Tsing Ma Bridge anemometer. The Tsing Yi station is shown as a regional proxy only; PITCL's 40/60/75 km/h bridge thresholds cannot be applied automatically.",
-            "香港天文台公開的分區風速資料沒有青馬大橋測風站。青衣站只可作為區域參考，不能自動套用珀麗灣客運40／60／75公里每小時的青馬大橋門檻。",
+            "HKO's open regional wind feed has no Tsing Ma Bridge anemometer. The Tsing Yi station is shown as a regional proxy only; PITCL's 40/60/75 km/h bridge thresholds cannot be applied automatically. If TD publishes a high-wind traffic-management stage, that official stage is reported instead.",
+            "香港天文台公開的分區風速資料沒有青馬大橋測風站。青衣站只可作為區域參考，不能自動套用珀麗灣客運40／60／75公里每小時的青馬大橋門檻。如運輸署公布強風交通管理階段，則會改為顯示該官方階段。",
         ),
         source: WIND_URL.into(),
     }
+}
+
+/// Apply a TD high-wind traffic-management stage when the special traffic
+/// news explicitly names one. This does not invent a stage from a regional
+/// wind proxy: the stage must be published by TD.
+pub fn apply_traffic_bridge_stage(report: &mut WeatherReport, alerts: &[TrafficAlert], lang: &str) {
+    let Some((stage, alert)) = bridge_stage_from_alerts(alerts) else {
+        return;
+    };
+    let headline = alert.headline.trim();
+    report.bridge_wind.stage = format!("stage-{stage}");
+    report.bridge_wind.stage_source = Some("TD special traffic news".into());
+    report.bridge_wind.stage_evidence = Some(headline.to_string());
+    report.bridge_wind.note = text(
+        lang,
+        &format!(
+            "No public HKO feed includes a Tsing Ma Bridge anemometer. Transport Department special traffic news publishes Stage {stage} high-wind traffic management: {headline}"
+        ),
+        &format!(
+            "天文台公開資料沒有青馬大橋風速計。運輸署特別交通消息公布第{stage}階段強風交通管理：{headline}"
+        ),
+    );
+}
+
+fn bridge_stage_from_alerts(alerts: &[TrafficAlert]) -> Option<(u8, &TrafficAlert)> {
+    let mut best: Option<(u8, &TrafficAlert)> = None;
+    for alert in alerts {
+        let haystack = format!("{} {}", alert.headline, alert.detail).to_lowercase();
+        // The stage must belong to Tsing Ma Bridge (or the Lantau Link that
+        // contains it). Generic "high wind" or another bridge must not set
+        // this stage.
+        let bridge_context = ["tsing ma", "lantau link", "青馬", "青嶼幹線"]
+            .iter()
+            .any(|keyword| haystack.contains(keyword));
+        if !bridge_context {
+            continue;
+        }
+        let stage = if ["stage iii", "stage 3", "第三階段"]
+            .iter()
+            .any(|keyword| haystack.contains(keyword))
+        {
+            3
+        } else if ["stage ii", "stage 2", "第二階段"]
+            .iter()
+            .any(|keyword| haystack.contains(keyword))
+        {
+            2
+        } else if ["stage i", "stage 1", "第一階段"]
+            .iter()
+            .any(|keyword| haystack.contains(keyword))
+        {
+            1
+        } else {
+            continue;
+        };
+        if best.is_none_or(|(current, _)| stage > current) {
+            best = Some((stage, alert));
+        }
+    }
+    best
 }
 
 fn string_at(value: &Value, path: &[&str]) -> String {
@@ -635,6 +706,74 @@ fn relevant_rain_place(place: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn alert(headline: &str, detail: &str) -> TrafficAlert {
+        TrafficAlert {
+            id: "1".into(),
+            status: "new".into(),
+            headline: headline.into(),
+            detail: detail.into(),
+            districts: vec!["Tsuen Wan".into()],
+            reference: "2026-11-22 01:00".into(),
+            relevant: true,
+        }
+    }
+
+    #[test]
+    fn td_high_wind_notice_sets_the_official_stage() {
+        let csv = "Date time,Automatic Weather Station,10-Minute Mean Wind Direction(Compass points),10-Minute Mean Speed(km/hour),10-Minute Maximum Gust(km/hour)\n202611220020,Tsing Yi,East,42,55\n";
+        let mut report = summarise(
+            &json!({"updateTime": "2026-11-22T01:00:00+08:00"}),
+            &json!({}),
+            &Value::Null,
+            &parse_wind(csv, "en"),
+            "en",
+        );
+        assert_eq!(report.bridge_wind.stage, "unknown");
+        apply_traffic_bridge_stage(
+            &mut report,
+            &[alert(
+                "Stage II high wind traffic management on Tsing Ma Bridge",
+                "Upper deck closed; vehicles must use the lower deck.",
+            )],
+            "en",
+        );
+        assert_eq!(report.bridge_wind.stage, "stage-2");
+        assert_eq!(
+            report.bridge_wind.stage_source.as_deref(),
+            Some("TD special traffic news")
+        );
+        assert!(!report.bridge_wind.available);
+        assert!(report.bridge_wind.note.contains("Stage 2"));
+    }
+
+    #[test]
+    fn another_bridge_high_wind_notice_does_not_set_the_tsing_ma_stage() {
+        let mut report = summarise(&json!({}), &json!({}), &Value::Null, &[], "en");
+        apply_traffic_bridge_stage(
+            &mut report,
+            &[alert(
+                "Stage II high wind traffic management on Tsing Tsuen Bridge",
+                "Strong wind; speed limit reduced.",
+            )],
+            "en",
+        );
+        assert_eq!(report.bridge_wind.stage, "unknown");
+    }
+
+    #[test]
+    fn unrelated_traffic_does_not_invent_a_bridge_stage() {
+        let mut report = summarise(&json!({}), &json!({}), &Value::Null, &[], "en");
+        apply_traffic_bridge_stage(
+            &mut report,
+            &[alert(
+                "Watermain works in North District",
+                "One lane closed.",
+            )],
+            "en",
+        );
+        assert_eq!(report.bridge_wind.stage, "unknown");
+    }
 
     #[test]
     fn t8_is_not_an_automatic_bus_cancellation() {

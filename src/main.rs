@@ -188,7 +188,7 @@ async fn run() -> Result<()> {
             }
         }
         Command::Route { route } => {
-            let info = service.route(&route)?;
+            let info = service.route_with_geometry(&route).await?;
             let first = service.stops(&info.code, 1).await.unwrap_or_default();
             let second = service.stops(&info.code, 2).await.unwrap_or_default();
             if cli.json {
@@ -215,6 +215,15 @@ async fn run() -> Result<()> {
                     if info.realtime { "yes" } else { "no" }
                 );
                 println!("{:<14}{}", "Source:", info.source);
+                for direction in &info.directions {
+                    if let Some(geometry) = &direction.geometry {
+                        println!(
+                            "{:<14}{} points (GeoJSON LineString in --json)",
+                            format!("Geometry {}:", direction.seq),
+                            geometry.coordinates.len()
+                        );
+                    }
+                }
                 if let Some(fare) = &info.fare {
                     println!("{:<14}{}", "Fare:", render::fare_summary(fare));
                     if let Some(note) = &fare.note {

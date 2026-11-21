@@ -36,7 +36,7 @@ pub async fn gather(service: &Service, lang: &str) -> StatusReport {
     );
 
     let mut errors = Vec::new();
-    let weather = match weather {
+    let mut weather = match weather {
         Ok(report) => Some(report),
         Err(error) => {
             errors.push(format!("weather: {error:#}"));
@@ -57,6 +57,10 @@ pub async fn gather(service: &Service, lang: &str) -> StatusReport {
             Vec::new()
         }
     };
+
+    if let (Some(weather), Some(traffic)) = (weather.as_mut(), traffic.as_ref()) {
+        crate::weather::apply_traffic_bridge_stage(weather, &traffic.alerts, lang);
+    }
 
     let (level, summary, bus, ferry) = match weather.as_ref() {
         Some(report) => (

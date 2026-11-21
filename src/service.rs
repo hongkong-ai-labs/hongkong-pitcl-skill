@@ -112,6 +112,37 @@ impl Service {
         })
     }
 
+    /// Route details enriched with the operator-published shape. Geometry is
+    /// additive: a feed failure leaves the static route intact and records a
+    /// note instead of failing the whole lookup.
+    pub async fn route_with_geometry(&self, code: &str) -> Result<RouteInfo> {
+        let mut info = self.route(code)?;
+        let Some(id) = socif::route_id(code) else {
+            return Ok(info);
+        };
+        match self.socif.metadata(id).await {
+            Ok(meta) => {
+                for direction in &mut info.directions {
+                    if let Some(published) = meta.direction(direction.seq) {
+                        let enriched = published.info();
+                        direction.shape = enriched.shape;
+                        direction.geometry = enriched.geometry;
+                    }
+                }
+                if info.directions.iter().all(|d| d.geometry.is_none()) {
+                    info.notes.push(
+                        "The operator feed did not publish a route shape for this route; geometry is unavailable."
+                            .into(),
+                    );
+                }
+            }
+            Err(error) => info.notes.push(format!(
+                "Route geometry unavailable from the operator feed: {error}"
+            )),
+        }
+        Ok(info)
+    }
+
     pub async fn stops(&self, code: &str, direction: u8) -> Result<Vec<Stop>> {
         let info = self.route(code)?;
         ensure_direction(&info, direction)?;
