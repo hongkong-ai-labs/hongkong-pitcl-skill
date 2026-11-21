@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod data;
 pub mod ferry;
+pub mod geo;
 pub mod kmb;
 pub mod mcp;
 pub mod model;

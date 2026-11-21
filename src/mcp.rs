@@ -6,6 +6,10 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use axum::Router;
+use axum::extract::{Request, State};
+use axum::http::{StatusCode, header};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
@@ -43,6 +47,59 @@ pub struct McpArgs {
     /// Streamable HTTP endpoint path
     #[arg(long, default_value = "/mcp")]
     pub path: String,
+    /// Require this API key on HTTP requests (or set MAWAN_MCP_API_KEY)
+    #[arg(long, alias = "auth-token")]
+    pub api_key: Option<String>,
+}
+
+#[derive(Clone)]
+struct AuthConfig {
+    key: Option<String>,
+}
+
+async fn require_api_key(
+    State(config): State<AuthConfig>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(expected) = config.key.as_deref() else {
+        return next.run(request).await;
+    };
+    if request.method() == axum::http::Method::OPTIONS {
+        return next.run(request).await;
+    }
+    let authorized = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|value| constant_time_eq(value.as_bytes(), expected.as_bytes()))
+        || request
+            .headers()
+            .get("x-api-key")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| constant_time_eq(value.as_bytes(), expected.as_bytes()));
+    if authorized {
+        next.run(request).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, "Bearer")],
+            "unauthorized",
+        )
+            .into_response()
+    }
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut difference = 0u8;
+    for (left, right) in left.iter().zip(right) {
+        difference |= left ^ right;
+    }
+    difference == 0
 }
 
 pub async fn run(args: McpArgs, cache_ttl: Duration) -> Result<()> {
@@ -63,6 +120,17 @@ async fn serve_http(args: McpArgs, service: Arc<Service>) -> Result<()> {
     if !args.path.starts_with('/') {
         bail!("--path must start with '/'");
     }
+    let auth = AuthConfig {
+        key: args
+            .api_key
+            .clone()
+            .or_else(|| std::env::var("MAWAN_MCP_API_KEY").ok())
+            .or_else(|| std::env::var("MAWAN_API_KEY").ok())
+            .filter(|value| !value.trim().is_empty()),
+    };
+    if auth.key.is_some() {
+        eprintln!("mawan MCP: API-key authentication enabled");
+    }
     let cancellation = CancellationToken::new();
     let config = StreamableHttpServerConfig::default()
         .with_cancellation_token(cancellation.child_token())
@@ -80,9 +148,12 @@ async fn serve_http(args: McpArgs, service: Arc<Service>) -> Result<()> {
         LocalSessionManager::default().into(),
         config,
     );
+    let protected = Router::new()
+        .nest_service(&args.path, http_service)
+        .layer(middleware::from_fn_with_state(auth, require_api_key));
     let router = Router::new()
         .route("/health", get(|| async { "ok" }))
-        .nest_service(&args.path, http_service)
+        .merge(protected)
         .layer(CorsLayer::permissive());
     let address: SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
@@ -233,13 +304,17 @@ impl MawanServer {
     }
 
     #[tool(
-        description = "Get one Ma Wan bus route with both directions, operator, data source, fares, notes, and the ordered stops in each direction."
+        description = "Get one Ma Wan bus route with both directions, operator, data source, fares, notes, the ordered stops, and the operator-published route geometry (encoded shape plus a GeoJSON LineString) when available."
     )]
     async fn get_ma_wan_route(
         &self,
         Parameters(args): Parameters<RouteOnlyArgs>,
     ) -> Result<String, ErrorData> {
-        let info = self.service.route(&args.route).map_err(mcp_error)?;
+        let info = self
+            .service
+            .route_with_geometry(&args.route)
+            .await
+            .map_err(mcp_error)?;
         let first = self.service.stops(&info.code, 1).await.unwrap_or_default();
         let second = self.service.stops(&info.code, 2).await.unwrap_or_default();
         pretty(&json!({
@@ -443,5 +518,18 @@ impl ServerHandler for MawanServer {
         .with_instructions(
             "Ma Wan (Park Island) buses, ferries, PITCL notices, HKO weather and TD traffic. Live buses: PITCL NR330/NR332/NR334/NR338 and KMB 230R. Timetable only: NR338S, NR331, NR331S and both ferry routes. Use get_ma_wan_status for a combined disruption view and get_ma_wan_next_departures for the next bus or ferry. Times are Hong Kong time (UTC+8). HKO has no public Tsing Ma Bridge anemometer, so bridge wind stage is unknown.",
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::constant_time_eq;
+
+    #[test]
+    fn compares_api_keys_without_early_exit() {
+        assert!(constant_time_eq(b"secret", b"secret"));
+        assert!(!constant_time_eq(b"secret", b"secreT"));
+        assert!(!constant_time_eq(b"secret", b"secret-longer"));
+        assert!(!constant_time_eq(b"", b"secret"));
     }
 }

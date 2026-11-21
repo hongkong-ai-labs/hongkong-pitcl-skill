@@ -1,0 +1,36 @@
+{
+  // Deploy from the repository root with: npx wrangler deploy
+  // Wrangler builds ./Dockerfile for linux/amd64 and runs it as a Container.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mawan-mcp",
+  "main": "cloudflare/src/index.js",
+  "compatibility_date": "2026-11-22",
+  "observability": {
+    "enabled": true
+  },
+  "containers": [
+    {
+      "class_name": "MawanContainer",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./Dockerfile"
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MAWAN_CONTAINER",
+        "class_name": "MawanContainer"
+      }
+    ]
+  },
+  "exports": {
+    "MawanContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}

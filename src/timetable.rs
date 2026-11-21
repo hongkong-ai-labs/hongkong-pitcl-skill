@@ -351,6 +351,8 @@ fn dir(seq: u8, orig_en: &str, orig_tc: &str, dest_en: &str, dest_tc: &str) -> D
         orig_tc: orig_tc.into(),
         dest_en: dest_en.into(),
         dest_tc: dest_tc.into(),
+        shape: None,
+        geometry: None,
     }
 }
 
