@@ -183,10 +183,10 @@ fn parse_xml(xml: &str, lang: &str) -> Result<Vec<TrafficAlert>> {
             }
             Ok(Event::Text(text)) => {
                 if let Some(builder) = current.as_mut() {
-                    let decoded = text.decode().unwrap_or_default().to_string();
-                    let value = quick_xml::escape::unescape(&decoded)
+                    let raw = text.xml_content(quick_xml::XmlVersion::Explicit1_0);
+                    let value = quick_xml::escape::unescape(&raw)
                         .map(|value| value.into_owned())
-                        .unwrap_or_else(|_| decoded.clone());
+                        .unwrap_or_else(|_| raw.into_owned());
                     // A text node can be split at entity boundaries (for
                     // example `&#034;` in the Chinese feed), so append rather
                     // than replace.
@@ -229,9 +229,8 @@ fn parse_xml(xml: &str, lang: &str) -> Result<Vec<TrafficAlert>> {
 }
 
 fn local_name(name: quick_xml::name::QName<'_>) -> String {
-    let bytes = name.as_ref();
-    let local = bytes.rsplit(|byte| *byte == b':').next().unwrap_or(bytes);
-    String::from_utf8_lossy(local).to_string()
+    let name = name.as_ref();
+    name.rsplit(':').next().unwrap_or(name).to_string()
 }
 
 fn normalize_reference(value: &str) -> String {
